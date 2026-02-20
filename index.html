@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>To The Moon</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0d17;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      canvas {
+        width: 100vw;
+        height: 100vh;
+        border: none;
+        background: #0b0d17;
+        image-rendering: pixelated;
+      }
+      .hint {
+        position: fixed;
+        left: 12px;
+        bottom: 10px;
+        color: #9fb2ff;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" width="900" height="600"></canvas>
+    <div class="hint">Drag on canvas to launch. R to reset.</div>
+    <script src="./game.js"></script>
+  </body>
+</html>
