@@ -28,7 +28,7 @@ function resizeCanvas() {
 }
 
 const frogImage = new Image();
-frogImage.src = "https://raw.githubusercontent.com/Skaberson/To-The-Moon/refs/heads/main/character/teto.png";
+frogImage.src = "./character/frog.png";
 let frogSolidPixels = null;
 let frogSolidPixelsBase = null;
 let frogSolidPixelsDeformed = null;
