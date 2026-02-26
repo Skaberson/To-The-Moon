@@ -28,7 +28,7 @@ function resizeCanvas() {
 }
 
 const frogImage = new Image();
-frogImage.src = "./character/frog.png";
+frogImage.src = "./character/teto.png";
 let frogSolidPixels = null;
 let frogSolidPixelsBase = null;
 let frogSolidPixelsDeformed = null;
