@@ -51,8 +51,6 @@ function resizeCanvas() {
 
 const frogImage = new Image();
 frogImage.src = "./character/frog.png";
-const frogCollisionImage = new Image();
-frogCollisionImage.src = "./character/frog.png";
 let frogSolidPixels = null;
 let frogSolidPixelsBase = null;
 let frogSolidPixelsDeformed = null;
@@ -74,7 +72,6 @@ const skins = [
     id: "frog",
     label: "Frog",
     base: "./character/frog.png",
-    collision: "./character/frog.png",
     outline: "./character/frog-outline.png",
     parts: "./character/frog-parts.png",
   },
@@ -82,22 +79,8 @@ const skins = [
     id: "teto",
     label: "Teto",
     base: "./character/teto.png",
-    collision: "./character/teto.png",
     outline: "./character/teto-outline.png",
     parts: "./character/teto-parts.png",
-  },
-  {
-    id: "miku",
-    label: "Miku",
-    base: "./character/miku.png",
-    collision: "./character/miku.png",
-    parts: "./character/miku-parts.png",
-  },
-  {
-    id: "tetoplush",
-    label: "Teto Plush",
-    base: "./character/tetoplush.png",
-    collision: "./character/tetoplush-altcollision.png",
   },
 ];
 let currentSkin = "frog";
@@ -112,7 +95,6 @@ let frogParts = null;
 let frogPartsCollisionMap = null;
 let frogPartsCollision = null;
 let frogPartsRenderToCollision = null;
-let currentSkinHasParts = true;
 const frogSquishScale = 2;
 let skinScale = 1;
 const tetoSize = { w: 0, h: 0 };
@@ -133,8 +115,6 @@ bg2Image.src = "";
 const cloudImages = [new Image(), new Image()];
 const earthImage = new Image();
 earthImage.src = "./space/earth.png";
-const planetImage = new Image();
-planetImage.src = "./newplanet/planet.png";
 const asteroidImage = new Image();
 asteroidImage.src = "./space/asteroid.png";
 let asteroidMask = null;
@@ -210,7 +190,6 @@ const camera = {
   y: 0,
   smooth: 6,
   zoom: 1.3,
-  roll: 0,
 };
 
 let lastTime = 0;
@@ -240,29 +219,9 @@ const shopState = {
 let inventoryAnim = 0;
 const titleParallax = { x: 0, y: 0 };
 let inventoryTab = "items"; // "items" | "packs"
-const enablePackSystem = false;
 const skinTabState = {
   open: false,
   anim: 0,
-};
-const enableInventorySkinTab = false;
-const skinViewerState = {
-  open: false,
-  index: 0,
-  previewSkinId: null,
-  preview: null,
-  sim: {
-    x: 0,
-    y: 0,
-    vx: 90,
-    vy: -30,
-    angle: 0,
-    angVel: 1.1,
-    lastTime: 0,
-    impactX: 0,
-    impactY: -1,
-    impactStrength: 0,
-  },
 };
 const debugState = {
   legDay: false,
@@ -270,7 +229,6 @@ const debugState = {
   noSquish: false,
   noRotation: false,
   noSwipeCap: false,
-  freezeCamera: false,
   flyMode: false,
   flySpeed: 260,
   showHitboxes: false,
@@ -295,15 +253,7 @@ function rebuildStars() {
 }
 
 function rebuildFrogRenderData() {
-  if (!frogImage.complete || !frogImage.width || !frogImage.height) {
-    frogBaseImageData = null;
-    frogSquishMap = null;
-    frogSquishCanvas = null;
-    frogSquishCtx = null;
-    frogSquishOutput = null;
-    frogSquishPad = 0;
-    return;
-  }
+  if (!frogImage.complete || !frogOutlineImage.complete) return;
   const offscreen = document.createElement("canvas");
   offscreen.width = frogImage.width * frogSquishScale;
   offscreen.height = frogImage.height * frogSquishScale;
@@ -317,27 +267,12 @@ function rebuildFrogRenderData() {
   frogSquishCanvas.height = offscreen.height + frogSquishPad * 2;
   frogSquishCtx = frogSquishCanvas.getContext("2d");
   frogSquishOutput = frogSquishCtx.createImageData(frogSquishCanvas.width, frogSquishCanvas.height);
-  frogSquishMap = null;
+  frogSquishMap = buildSquishMap(frogOutlineImage, frogSquishScale);
 }
 
 function rebuildFrogPartsData() {
-  if (!currentSkinHasParts) {
-    frogPartsMap = null;
-    frogParts = null;
-    frogPartsCollisionMap = null;
-    frogPartsCollision = null;
-    frogPartsRenderToCollision = null;
-    return;
-  }
-  if (!frogPartsImage.complete || !frogPartsImage.width || !frogPartsImage.height) {
-    frogPartsMap = null;
-    frogParts = null;
-    frogPartsCollisionMap = null;
-    frogPartsCollision = null;
-    frogPartsRenderToCollision = null;
-    return;
-  }
-  const result = buildPartsMap(frogPartsImage, frogSquishScale, null);
+  if (!frogPartsImage.complete || !frogSquishMap) return;
+  const result = buildPartsMap(frogPartsImage, frogSquishScale, frogSquishMap);
   frogPartsMap = result.map;
   frogParts = result.parts;
   const resultCollision = buildPartsMap(frogPartsImage, 1, null);
@@ -362,11 +297,9 @@ function loadSkin(skinId) {
   const skin = skins.find((s) => s.id === skinId);
   if (!skin) return;
   currentSkin = skin.id;
-  currentSkinHasParts = !!skin.parts;
   frogImage.src = skin.base;
-  frogCollisionImage.src = skin.collision || skin.base;
-  frogOutlineImage.src = skin.outline || transparentPixel;
-  frogPartsImage.src = skin.parts || transparentPixel;
+  frogOutlineImage.src = skin.outline;
+  frogPartsImage.src = skin.parts;
   frogSolidPixels = null;
   frogSolidPixelsBase = null;
   frogSolidPixelsDeformed = null;
@@ -382,14 +315,6 @@ function loadSkin(skinId) {
   frogPartsCollision = null;
   frogPartsRenderToCollision = null;
   updateSkinScale();
-}
-
-function rebuildCollisionMask() {
-  if (!frogImage.complete || !frogCollisionImage.complete) return;
-  const targetW = frogImage.width;
-  const targetH = frogImage.height;
-  if (!targetW || !targetH) return;
-  buildSolidPixelMaskScaled(frogCollisionImage, targetW, targetH);
 }
 
 function ensureAsteroids() {
@@ -458,44 +383,11 @@ const bg2 = {
   scale: 3.4,
   y: -220,
 };
-const showBg1 = false;
-const showBg2 = false;
-const enableSpaceWorldShrink = false;
 const middleground = {
   scale: 2.8,
   y: 40,
   parallax: 0.8,
 };
-const planetWorld = {
-  enabled: false,
-  radius: 2200,
-  minZoom: 0.28,
-  viewStartAltitude: 2600,
-  viewEndAltitude: 5200,
-  xLiftEnabled: true,
-  xLiftPerPixel: 0.02,
-};
-const planetSpriteCollision = {
-  enabled: true,
-  chunkSize: 128,
-  alphaThreshold: 10,
-  scale: 5,
-  centerX: 0,
-  centerY: 2500,
-  gravityStrength: 980,
-  cullMargin: 160,
-  width: 0,
-  height: 0,
-  chunksX: 0,
-  chunksY: 0,
-  chunks: [],
-  activeChunkIds: new Set(),
-  surfaceSamples: 720,
-  surfaceRadiusByAngle: [],
-  ready: false,
-};
-const ttcLower3CollisionRepeats = false;
-const ttcLower3Solid = false;
 
 const woodState = {
   count: 0,
@@ -628,35 +520,6 @@ function buildForegroundLayers() {
 
 function spawnProps() {
   props.length = 0;
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    const count = 42;
-    let toggle = false;
-    for (let i = 0; i < count; i += 1) {
-      const angle = (i / count) * Math.PI * 2;
-      const surface = findPlanetSurfaceAtAngle(angle);
-      if (!surface) continue;
-      const type = toggle ? propTypes.tree2 : propTypes.tree1;
-      toggle = !toggle;
-      const img = type.image;
-      if (!img.complete) continue;
-      const w = img.width * type.scale;
-      const h = img.height * type.scale;
-      props.push({
-        type,
-        x: surface.x - w / 2,
-        y: surface.y - h,
-        hits: 0,
-        lastHitAt: 0,
-        planet: {
-          contactX: surface.x,
-          contactY: surface.y,
-          nx: surface.nx,
-          ny: surface.ny,
-        },
-      });
-    }
-    return;
-  }
   const span = 1400;
   const startX = player.x - span / 2;
   const step = 180;
@@ -732,75 +595,8 @@ function resetPlayer() {
   camera.y = player.y - WORLD.height / 2;
 }
 
-function getPlanetViewBlend() {
-  if (!planetWorld.enabled) return 0;
-  const altitude = Math.max(0, foreground.y - player.y);
-  const span = Math.max(1, planetWorld.viewEndAltitude - planetWorld.viewStartAltitude);
-  return Math.min(1, Math.max(0, (altitude - planetWorld.viewStartAltitude) / span));
-}
-
-function mapWorldToPlanet(wx, wy) {
-  if (!planetWorld.enabled) return { x: wx, y: wy, angle: 0 };
-  const tau = Math.PI * 2;
-  let theta = wx / planetWorld.radius;
-  theta = ((theta + Math.PI) % tau + tau) % tau - Math.PI;
-  const radial = planetWorld.radius - (wy - foreground.y);
-  // Keep mapping continuous past the center without introducing a hard depth cap.
-  const angle = radial >= 0 ? theta : theta + Math.PI;
-  const rAbs = Math.abs(radial);
-  const xLift =
-    planetWorld.xLiftEnabled
-      ? Math.abs(wx) * planetWorld.xLiftPerPixel
-      : 0;
-  return {
-    x: rAbs * Math.sin(angle),
-    y: foreground.y + planetWorld.radius - rAbs * Math.cos(angle) - xLift,
-    angle,
-  };
-}
-
-function drawForegroundCurved() {
-  for (const layer of foregroundLayers) {
-    if (!layer.image.complete) continue;
-    const tileW = layer.width * layer.scale;
-    const tileH = layer.height * layer.scale;
-    if (!tileW || !tileH) continue;
-
-    const cullRadius = getCameraCullRadiusWorld(Math.max(tileW, tileH));
-    const tileCount = Math.max(12, Math.ceil((cullRadius * 2) / tileW) + 8);
-    const cameraCenterX = camera.x + WORLD.width / (2 * camera.zoom);
-    const centerTile = Math.floor((cameraCenterX - layer.x) / tileW);
-    const startTile = centerTile - Math.floor(tileCount / 2);
-    const endTile = startTile + tileCount;
-
-    for (let tile = startTile; tile <= endTile; tile += 1) {
-      const x = layer.x + tile * tileW;
-      const chunk = getLayerChunk(layer, tile, 0, false);
-      const source = chunk ? chunk.canvas : layer.image;
-      const cx = x + tileW / 2;
-      const cy = layer.y + tileH / 2;
-      const mapped = mapWorldToPlanet(cx, cy);
-      const mappedScreen = worldToScreen({ x: mapped.x, y: mapped.y });
-      if (
-        mappedScreen.x < -tileW * camera.zoom ||
-        mappedScreen.x > WORLD.width + tileW * camera.zoom ||
-        mappedScreen.y < -tileH * camera.zoom ||
-        mappedScreen.y > WORLD.height + tileH * camera.zoom
-      ) {
-        continue;
-      }
-      ctx.save();
-      ctx.translate(mapped.x, mapped.y);
-      ctx.rotate(mapped.angle);
-      ctx.drawImage(source, -tileW / 2, -tileH / 2, tileW, tileH);
-      ctx.restore();
-    }
-  }
-}
-
 function drawParallax(offsetY) {
-  const center = getCameraCenterWorld();
-  const heightT = getAtmosphereBlendAt(center.x, center.y);
+  const heightT = Math.min(1, Math.max(0, -camera.y / 4800));
   const skyTop = { r: 120, g: 185, b: 255 };
   const skyBottom = { r: 8, g: 16, b: 38 };
   const r = Math.round(skyTop.r + (skyBottom.r - skyTop.r) * heightT);
@@ -809,49 +605,15 @@ function drawParallax(offsetY) {
   ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
   ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
-  const spaceBlend = getSpaceBlendAt(center.x, center.y);
-  const starAlpha = Math.min(1, 0.15 + spaceBlend * 0.85);
-  ctx.fillStyle = `rgba(235, 240, 255, ${starAlpha})`;
+  const starAlpha = Math.min(1, Math.max(0, (heightT - 0.2) / 0.6));
+  ctx.fillStyle = `rgba(207, 215, 255, ${starAlpha})`;
   for (const s of stars) {
     const y = (s.y + offsetY * 0.05) % WORLD.height;
     ctx.beginPath();
-    ctx.arc(s.x, y, s.r * 1.2, 0, Math.PI * 2);
+    ctx.arc(s.x, y, s.r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-}
-
-function getCameraCenterWorld() {
-  return {
-    x: camera.x + WORLD.width / (2 * camera.zoom),
-    y: camera.y + WORLD.height / (2 * camera.zoom),
-  };
-}
-
-function getCameraCullRadiusWorld(extra = 0) {
-  const halfDiag = Math.hypot(WORLD.width * 0.5, WORLD.height * 0.5);
-  return halfDiag / camera.zoom + extra;
-}
-
-function worldToScreen(point) {
-  const center = getCameraCenterWorld();
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const cos = Math.cos(camera.roll);
-  const sin = Math.sin(camera.roll);
-  return {
-    x: WORLD.width / 2 + (dx * cos + dy * sin) * camera.zoom,
-    y: WORLD.height / 2 + (-dx * sin + dy * cos) * camera.zoom,
-  };
-}
-
-function rotateScreenVectorToWorld(dx, dy) {
-  const cos = Math.cos(camera.roll);
-  const sin = Math.sin(camera.roll);
-  return {
-    x: dx * cos - dy * sin,
-    y: dx * sin + dy * cos,
-  };
 }
 
 function drawPlayer() {
@@ -859,37 +621,17 @@ function drawPlayer() {
   const scale = getPlayerScale();
   const w = frogImage.width * scale;
   const h = frogImage.height * scale;
-  const mapped = mapWorldToPlanet(player.x, player.y);
-  const baseAngle = mapped.angle;
 
   ctx.save();
-  ctx.translate(mapped.x, mapped.y);
+  ctx.translate(player.x, player.y);
   if (!debugState.noRotation) {
-    ctx.rotate(player.angle + baseAngle);
-  } else if (planetWorld.enabled) {
-    ctx.rotate(baseAngle);
+    ctx.rotate(player.angle);
   }
-  if (frogSquishCanvas && squishState.value > 0 && frogSquishOutput) {
-    const padWorld = (frogSquishPad / frogSquishScale) * scale;
-    const drawW = w + padWorld * 2;
-    const drawH = h + padWorld * 2;
-    ctx.drawImage(frogSquishCanvas, -w / 2 - padWorld, -h / 2 - padWorld, drawW, drawH);
-  } else {
-    ctx.drawImage(frogImage, -w / 2, -h / 2, w, h);
-  }
+  ctx.drawImage(frogImage, -w / 2, -h / 2, w, h);
   ctx.restore();
 }
 
 function buildSolidPixelMask(image) {
-  if (!image || !image.complete || !image.width || !image.height) {
-    frogHalfWidth = 0;
-    frogHalfHeight = 0;
-    frogMass = 1;
-    frogInertia = 1;
-    frogSolidPixelsBase = [];
-    frogSolidPixels = [];
-    return [];
-  }
   const offscreen = document.createElement("canvas");
   offscreen.width = image.width;
   offscreen.height = image.height;
@@ -925,69 +667,10 @@ function buildSolidPixelMask(image) {
   return solid;
 }
 
-function buildSolidPixelMaskScaled(sourceImage, targetWidth, targetHeight) {
-  if (
-    !sourceImage ||
-    !sourceImage.complete ||
-    !sourceImage.width ||
-    !sourceImage.height ||
-    !targetWidth ||
-    !targetHeight
-  ) {
-    frogHalfWidth = 0;
-    frogHalfHeight = 0;
-    frogMass = 1;
-    frogInertia = 1;
-    frogSolidPixelsBase = [];
-    frogSolidPixels = [];
-    return [];
-  }
-  const offscreen = document.createElement("canvas");
-  offscreen.width = targetWidth;
-  offscreen.height = targetHeight;
-  const octx = offscreen.getContext("2d");
-  octx.imageSmoothingEnabled = false;
-  octx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
-
-  const { data } = octx.getImageData(0, 0, targetWidth, targetHeight);
-  const solid = [];
-  const alphaThreshold = 10;
-  const density = 1;
-  let mass = 0;
-  let inertia = 0;
-
-  for (let y = 0; y < targetHeight; y += 1) {
-    for (let x = 0; x < targetWidth; x += 1) {
-      const idx = (y * targetWidth + x) * 4;
-      if (data[idx + 3] > alphaThreshold) {
-        solid.push({ x, y });
-        const lx = x - targetWidth / 2;
-        const ly = y - targetHeight / 2;
-        mass += density;
-        inertia += density * (lx * lx + ly * ly);
-      }
-    }
-  }
-
-  frogHalfWidth = targetWidth / 2;
-  frogHalfHeight = targetHeight / 2;
-  frogMass = Math.max(1, mass);
-  frogInertia = Math.max(1, inertia);
-  frogSolidPixelsBase = solid;
-  frogSolidPixels = solid;
-  return solid;
-}
-
 function buildSquishMap(image, scale) {
-  if (!image || !image.complete || !image.width || !image.height || !scale) {
-    return new Float32Array(0);
-  }
   const offscreen = document.createElement("canvas");
   offscreen.width = image.width * scale;
   offscreen.height = image.height * scale;
-  if (!offscreen.width || !offscreen.height) {
-    return new Float32Array(0);
-  }
   const octx = offscreen.getContext("2d");
   octx.imageSmoothingEnabled = false;
   octx.drawImage(image, 0, 0, offscreen.width, offscreen.height);
@@ -1012,15 +695,9 @@ function buildSquishMap(image, scale) {
 }
 
 function buildPartsMap(image, scale, squishMap) {
-  if (!image || !image.complete || !image.width || !image.height || !scale) {
-    return { map: new Int32Array(0), parts: [], width: 0, height: 0 };
-  }
   const offscreen = document.createElement("canvas");
   offscreen.width = image.width * scale;
   offscreen.height = image.height * scale;
-  if (!offscreen.width || !offscreen.height) {
-    return { map: new Int32Array(0), parts: [], width: 0, height: 0 };
-  }
   const octx = offscreen.getContext("2d");
   octx.imageSmoothingEnabled = false;
   octx.drawImage(image, 0, 0, offscreen.width, offscreen.height);
@@ -1132,9 +809,6 @@ function buildPartsMap(image, scale, squishMap) {
 }
 
 function buildSolidPixelMap(image) {
-  if (!image || !image.complete || !image.width || !image.height) {
-    return new Uint8Array(0);
-  }
   const offscreen = document.createElement("canvas");
   offscreen.width = image.width;
   offscreen.height = image.height;
@@ -1157,376 +831,6 @@ function buildImageMaskInfo(image) {
   return { mask, width: image.width, height: image.height };
 }
 
-function rebuildPlanetChunks() {
-  planetSpriteCollision.ready = false;
-  planetSpriteCollision.chunks = [];
-  planetSpriteCollision.activeChunkIds.clear();
-  if (!planetSpriteCollision.enabled) return;
-  if (!planetImage.complete || !planetImage.width || !planetImage.height) return;
-
-  const width = planetImage.width;
-  const height = planetImage.height;
-  const chunkSize = planetSpriteCollision.chunkSize;
-  const chunksX = Math.ceil(width / chunkSize);
-  const chunksY = Math.ceil(height / chunkSize);
-  const offscreen = document.createElement("canvas");
-  offscreen.width = width;
-  offscreen.height = height;
-  const octx = offscreen.getContext("2d");
-  octx.imageSmoothingEnabled = false;
-  octx.drawImage(planetImage, 0, 0, width, height);
-  const { data } = octx.getImageData(0, 0, width, height);
-
-  const chunks = new Array(chunksX * chunksY).fill(null);
-  for (let cy = 0; cy < chunksY; cy += 1) {
-    for (let cx = 0; cx < chunksX; cx += 1) {
-      const x0 = cx * chunkSize;
-      const y0 = cy * chunkSize;
-      const w = Math.min(chunkSize, width - x0);
-      const h = Math.min(chunkSize, height - y0);
-      const mask = new Uint8Array(w * h);
-      let hasSolid = false;
-      for (let y = 0; y < h; y += 1) {
-        const sy = y0 + y;
-        for (let x = 0; x < w; x += 1) {
-          const sx = x0 + x;
-          const srcIdx = (sy * width + sx) * 4 + 3;
-          if (data[srcIdx] > planetSpriteCollision.alphaThreshold) {
-            mask[y * w + x] = 1;
-            hasSolid = true;
-          }
-        }
-      }
-      const id = cy * chunksX + cx;
-      chunks[id] = hasSolid ? { id, cx, cy, x0, y0, w, h, mask } : null;
-    }
-  }
-
-  planetSpriteCollision.width = width;
-  planetSpriteCollision.height = height;
-  if (planetSpriteCollision.centerY === 2500) {
-    planetSpriteCollision.centerX = 0;
-    planetSpriteCollision.centerY = foreground.y + (height * planetSpriteCollision.scale) / 2 + 120;
-  }
-  planetSpriteCollision.chunksX = chunksX;
-  planetSpriteCollision.chunksY = chunksY;
-  planetSpriteCollision.chunks = chunks;
-  planetSpriteCollision.ready = true;
-  rebuildPlanetSurfaceRadiusLookup();
-}
-
-function rebuildPlanetSurfaceRadiusLookup() {
-  planetSpriteCollision.surfaceRadiusByAngle = [];
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return;
-  const samples = Math.max(64, planetSpriteCollision.surfaceSamples | 0);
-  const width = planetSpriteCollision.width;
-  const height = planetSpriteCollision.height;
-  const cx = width * 0.5;
-  const cy = height * 0.5;
-  const maxR = Math.hypot(width, height) * 0.5;
-  const scale = planetSpriteCollision.scale;
-  const radii = new Array(samples).fill(0);
-
-  for (let i = 0; i < samples; i += 1) {
-    const angle = (i / samples) * Math.PI * 2;
-    const ca = Math.cos(angle);
-    const sa = Math.sin(angle);
-    let hit = 0;
-    for (let r = maxR; r >= 0; r -= 1) {
-      const px = Math.round(cx + ca * r);
-      const py = Math.round(cy + sa * r);
-      if (samplePlanetMaskAtPixelMode(px, py, false)) {
-        hit = r * scale;
-        break;
-      }
-    }
-    radii[i] = hit;
-  }
-
-  planetSpriteCollision.surfaceRadiusByAngle = radii;
-}
-
-function getPlanetSurfaceRadiusAtAngle(angle) {
-  const radii = planetSpriteCollision.surfaceRadiusByAngle;
-  if (!radii || !radii.length) {
-    const bounds = getPlanetWorldBounds();
-    return Math.min(bounds.width, bounds.height) * 0.5;
-  }
-  const tau = Math.PI * 2;
-  let a = angle % tau;
-  if (a < 0) a += tau;
-  const f = (a / tau) * radii.length;
-  const i0 = Math.floor(f) % radii.length;
-  const i1 = (i0 + 1) % radii.length;
-  const t = f - Math.floor(f);
-  return radii[i0] + (radii[i1] - radii[i0]) * t;
-}
-
-function getAltitudeAbovePlanetSurfaceAt(x, y) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) {
-    return Math.max(0, foreground.y - y);
-  }
-  const center = getPlanetCenterWorld();
-  const dx = x - center.x;
-  const dy = y - center.y;
-  const radius = Math.hypot(dx, dy);
-  const angle = Math.atan2(dy, dx);
-  const surfaceRadius = getPlanetSurfaceRadiusAtAngle(angle);
-  return radius - surfaceRadius;
-}
-
-function getSpaceBlendAt(x, y) {
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    const altitude = getAltitudeAbovePlanetSurfaceAt(x, y);
-    const startAltitude = 120;
-    const fadeRange = 1200;
-    return Math.min(1, Math.max(0, (altitude - startAltitude) / fadeRange));
-  }
-  const heightT = Math.min(1, Math.max(0, -y / 4800));
-  return Math.min(1, Math.max(0, (heightT - 0.5) / 0.5));
-}
-
-function getAtmosphereBlendAt(x, y) {
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    const altitude = getAltitudeAbovePlanetSurfaceAt(x, y);
-    const atmosphereRange = 1000;
-    return Math.min(1, Math.max(0, altitude / atmosphereRange));
-  }
-  return Math.min(1, Math.max(0, -y / 4800));
-}
-
-function getSpaceWorldScaleAt(x, y) {
-  const t = getSpaceBlendAt(x, y);
-  const eased = t * t * (3 - 2 * t);
-  const minScale = 0.2;
-  return 1 - (1 - minScale) * eased;
-}
-
-function getPlanetFitWorldScaleAt(x, y) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return 1;
-  const center = getPlanetCenterWorld();
-  const dx = x - center.x;
-  const dy = y - center.y;
-  const distToCenter = Math.hypot(dx, dy);
-  const bounds = getPlanetWorldBounds();
-  const planetRadius = Math.max(bounds.width, bounds.height) * 0.5;
-  const halfDiagPixels = Math.hypot(WORLD.width * 0.5, WORLD.height * 0.5);
-  const denom = Math.max(1, camera.zoom * (distToCenter + planetRadius * 1.02));
-  return Math.min(1, halfDiagPixels / denom);
-}
-
-function getPlanetWorldBounds() {
-  const w = planetSpriteCollision.width * planetSpriteCollision.scale;
-  const h = planetSpriteCollision.height * planetSpriteCollision.scale;
-  return {
-    left: planetSpriteCollision.centerX - w / 2,
-    top: planetSpriteCollision.centerY - h / 2,
-    width: w,
-    height: h,
-  };
-}
-
-function getPlanetCenterWorld() {
-  return {
-    x: planetSpriteCollision.centerX,
-    y: planetSpriteCollision.centerY,
-  };
-}
-
-function getGravityDirectionAt(x, y) {
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    const pc = getPlanetCenterWorld();
-    const gx = pc.x - x;
-    const gy = pc.y - y;
-    const gLen = Math.hypot(gx, gy) || 1;
-    return { x: gx / gLen, y: gy / gLen };
-  }
-  return { x: 0, y: 1 };
-}
-
-function updatePlanetActiveChunks() {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return;
-  const chunksX = planetSpriteCollision.chunksX;
-  const chunksY = planetSpriteCollision.chunksY;
-  const chunkSize = planetSpriteCollision.chunkSize;
-  const scale = planetSpriteCollision.scale;
-  const bounds = getPlanetWorldBounds();
-  const center = getCameraCenterWorld();
-  const cullRadius = getCameraCullRadiusWorld(planetSpriteCollision.cullMargin);
-  const left = center.x - cullRadius;
-  const right = center.x + cullRadius;
-  const top = center.y - cullRadius;
-  const bottom = center.y + cullRadius;
-
-  const minPX = Math.floor((left - bounds.left) / scale);
-  const maxPX = Math.floor((right - bounds.left) / scale);
-  const minPY = Math.floor((top - bounds.top) / scale);
-  const maxPY = Math.floor((bottom - bounds.top) / scale);
-  const minCX = Math.max(0, Math.floor(minPX / chunkSize));
-  const maxCX = Math.min(chunksX - 1, Math.floor(maxPX / chunkSize));
-  const minCY = Math.max(0, Math.floor(minPY / chunkSize));
-  const maxCY = Math.min(chunksY - 1, Math.floor(maxPY / chunkSize));
-
-  planetSpriteCollision.activeChunkIds.clear();
-  for (let cy = minCY; cy <= maxCY; cy += 1) {
-    for (let cx = minCX; cx <= maxCX; cx += 1) {
-      const id = cy * chunksX + cx;
-      if (planetSpriteCollision.chunks[id]) {
-        planetSpriteCollision.activeChunkIds.add(id);
-      }
-    }
-  }
-}
-
-function samplePlanetMaskAtWorld(wx, wy) {
-  return samplePlanetMaskAtWorldMode(wx, wy, true);
-}
-
-function samplePlanetMaskAtWorldMode(wx, wy, activeOnly) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return 0;
-  const bounds = getPlanetWorldBounds();
-  const scale = planetSpriteCollision.scale;
-  const px = Math.round((wx - bounds.left) / scale);
-  const py = Math.round((wy - bounds.top) / scale);
-  return samplePlanetMaskAtPixelMode(px, py, activeOnly);
-}
-
-function samplePlanetMaskAtPixelMode(px, py, activeOnly) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return 0;
-  if (px < 0 || py < 0 || px >= planetSpriteCollision.width || py >= planetSpriteCollision.height) return 0;
-  const chunkSize = planetSpriteCollision.chunkSize;
-  const cx = Math.floor(px / chunkSize);
-  const cy = Math.floor(py / chunkSize);
-  const id = cy * planetSpriteCollision.chunksX + cx;
-  if (activeOnly && !planetSpriteCollision.activeChunkIds.has(id)) return 0;
-  const chunk = planetSpriteCollision.chunks[id];
-  if (!chunk) return 0;
-  const lx = px - chunk.x0;
-  const ly = py - chunk.y0;
-  if (lx < 0 || ly < 0 || lx >= chunk.w || ly >= chunk.h) return 0;
-  return chunk.mask[ly * chunk.w + lx] ? 1 : 0;
-}
-
-function samplePlanetDensityAtWorldMode(wx, wy, activeOnly) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return 0;
-  const bounds = getPlanetWorldBounds();
-  const scale = planetSpriteCollision.scale;
-  const px = (wx - bounds.left) / scale;
-  const py = (wy - bounds.top) / scale;
-  const x0 = Math.floor(px);
-  const y0 = Math.floor(py);
-  const x1 = x0 + 1;
-  const y1 = y0 + 1;
-  const tx = px - x0;
-  const ty = py - y0;
-  const s00 = samplePlanetMaskAtPixelMode(x0, y0, activeOnly);
-  const s10 = samplePlanetMaskAtPixelMode(x1, y0, activeOnly);
-  const s01 = samplePlanetMaskAtPixelMode(x0, y1, activeOnly);
-  const s11 = samplePlanetMaskAtPixelMode(x1, y1, activeOnly);
-  const a = s00 + (s10 - s00) * tx;
-  const b = s01 + (s11 - s01) * tx;
-  return a + (b - a) * ty;
-}
-
-function samplePlanetDensityAtWorld(wx, wy) {
-  return samplePlanetDensityAtWorldMode(wx, wy, true);
-}
-
-function samplePlanetDensitySmoothedAtWorld(wx, wy) {
-  const r = Math.max(1, planetSpriteCollision.scale * 0.85);
-  const c = samplePlanetDensityAtWorld(wx, wy) * 4;
-  const l = samplePlanetDensityAtWorld(wx - r, wy) * 2;
-  const rr = samplePlanetDensityAtWorld(wx + r, wy) * 2;
-  const u = samplePlanetDensityAtWorld(wx, wy - r) * 2;
-  const d = samplePlanetDensityAtWorld(wx, wy + r) * 2;
-  const ul = samplePlanetDensityAtWorld(wx - r, wy - r);
-  const ur = samplePlanetDensityAtWorld(wx + r, wy - r);
-  const dl = samplePlanetDensityAtWorld(wx - r, wy + r);
-  const dr = samplePlanetDensityAtWorld(wx + r, wy + r);
-  return (c + l + rr + u + d + ul + ur + dl + dr) / 16;
-}
-
-function getPlanetSmoothNormalAtWorld(wx, wy) {
-  const step = Math.max(1.5, planetSpriteCollision.scale * 1.25);
-  const nx = samplePlanetDensitySmoothedAtWorld(wx - step, wy) - samplePlanetDensitySmoothedAtWorld(wx + step, wy);
-  const ny = samplePlanetDensitySmoothedAtWorld(wx, wy - step) - samplePlanetDensitySmoothedAtWorld(wx, wy + step);
-  let normalX = nx;
-  let normalY = ny;
-  const nLen = Math.hypot(normalX, normalY);
-  if (nLen > 1e-5) {
-    normalX /= nLen;
-    normalY /= nLen;
-    return { x: normalX, y: normalY };
-  }
-  // Fallback to radial outward normal if local density gradient is flat.
-  const pc = getPlanetCenterWorld();
-  const rx = wx - pc.x;
-  const ry = wy - pc.y;
-  const rLen = Math.hypot(rx, ry) || 1;
-  return { x: rx / rLen, y: ry / rLen };
-}
-
-function findPlanetSurfaceAtAngle(angle) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready) return null;
-  const pc = getPlanetCenterWorld();
-  const bounds = getPlanetWorldBounds();
-  const maxR = Math.hypot(bounds.width, bounds.height);
-  const nx = Math.cos(angle);
-  const ny = Math.sin(angle);
-  const step = Math.max(1, planetSpriteCollision.scale);
-  for (let r = maxR; r >= 0; r -= step) {
-    const wx = pc.x + nx * r;
-    const wy = pc.y + ny * r;
-    if (samplePlanetMaskAtWorldMode(wx, wy, false)) {
-      return { x: wx, y: wy, nx, ny };
-    }
-  }
-  return null;
-}
-
-function getPlanetPropPlacement(prop) {
-  if (!prop.planet) return null;
-  const img = prop.type.image;
-  if (!img.complete) return null;
-  const w = img.width * prop.type.scale;
-  const h = img.height * prop.type.scale;
-  const nx = prop.planet.nx;
-  const ny = prop.planet.ny;
-  // Align sprite's local up vector (0, -1) to the outward surface normal.
-  const angle = Math.atan2(nx, -ny);
-  // Place sprite bottom on the surface contact point.
-  const cx = prop.planet.contactX + nx * (h / 2);
-  const cy = prop.planet.contactY + ny * (h / 2);
-  return { cx, cy, angle, w, h };
-}
-
-function getPlanetCollisionInfo(testX, testY) {
-  if (!planetSpriteCollision.enabled || !planetSpriteCollision.ready || !frogSolidPixels) return { hit: false };
-  const cos = Math.cos(player.angle);
-  const sin = Math.sin(player.angle);
-  const scale = getPlayerScale();
-  const solidPixels = frogSolidPixelsDeformed || frogSolidPixels;
-  const solidThreshold = 0.5;
-
-  for (const p of solidPixels) {
-    const lx = (p.x - frogHalfWidth) * scale;
-    const ly = (p.y - frogHalfHeight) * scale;
-    const wx = testX + lx * cos - ly * sin;
-    const wy = testY + lx * sin + ly * cos;
-    if (samplePlanetDensitySmoothedAtWorld(wx, wy) < solidThreshold) continue;
-    const normal = getPlanetSmoothNormalAtWorld(wx, wy);
-
-    return {
-      hit: true,
-      contact: { x: wx, y: wy },
-      normal,
-      source: "planet",
-    };
-  }
-
-  return { hit: false };
-}
-
 function rollRarity() {
   const total = Object.values(rarityWeights).reduce((sum, v) => sum + v, 0);
   let r = Math.random() * total;
@@ -1547,82 +851,6 @@ function openPack(pack) {
   itemInventory.counts.set(item.id, prev + 1);
   itemInventory.lastOpened = item;
   return item;
-}
-
-function buildSkinViewerPreviewParts(preview) {
-  if (!preview || !preview.image.complete || !preview.image.width || !preview.image.height) return;
-  if (!preview.partsImage || !preview.partsImage.complete || !preview.partsImage.width || !preview.partsImage.height) {
-    preview.partsData = null;
-    return;
-  }
-  if (preview.partsImage.width !== preview.image.width || preview.partsImage.height !== preview.image.height) {
-    preview.partsData = null;
-    return;
-  }
-
-  const result = buildPartsMap(preview.partsImage, 1, null);
-  if (!result || !result.map || !result.parts || !result.parts.length) {
-    preview.partsData = null;
-    return;
-  }
-
-  const baseCanvas = document.createElement("canvas");
-  baseCanvas.width = preview.image.width;
-  baseCanvas.height = preview.image.height;
-  const bctx = baseCanvas.getContext("2d");
-  bctx.imageSmoothingEnabled = false;
-  bctx.drawImage(preview.image, 0, 0);
-  const base = bctx.getImageData(0, 0, baseCanvas.width, baseCanvas.height);
-  const partCanvases = [];
-
-  for (let partId = 0; partId < result.parts.length; partId += 1) {
-    const pc = document.createElement("canvas");
-    pc.width = baseCanvas.width;
-    pc.height = baseCanvas.height;
-    const pctx = pc.getContext("2d");
-    const out = pctx.createImageData(pc.width, pc.height);
-    for (let i = 0; i < result.map.length; i += 1) {
-      if (result.map[i] !== partId) continue;
-      const di = i * 4;
-      out.data[di + 0] = base.data[di + 0];
-      out.data[di + 1] = base.data[di + 1];
-      out.data[di + 2] = base.data[di + 2];
-      out.data[di + 3] = base.data[di + 3];
-    }
-    pctx.putImageData(out, 0, 0);
-    partCanvases.push(pc);
-  }
-
-  preview.partsData = {
-    width: result.width,
-    height: result.height,
-    parts: result.parts,
-    canvases: partCanvases,
-  };
-}
-
-function ensureSkinViewerPreview() {
-  const skin = skins[skinViewerState.index];
-  if (!skin) return;
-  if (skinViewerState.previewSkinId === skin.id && skinViewerState.preview) return;
-
-  const preview = {
-    skinId: skin.id,
-    image: new Image(),
-    partsImage: new Image(),
-    partsData: null,
-  };
-  preview.image.src = skin.base;
-  preview.partsImage.src = skin.parts || transparentPixel;
-  preview.image.onload = () => {
-    buildSkinViewerPreviewParts(preview);
-  };
-  preview.partsImage.onload = () => {
-    buildSkinViewerPreviewParts(preview);
-  };
-
-  skinViewerState.previewSkinId = skin.id;
-  skinViewerState.preview = preview;
 }
 
 function drawTiledImageHorizontal(image, offsetX, y, scale = 1, viewLeft = 0, viewRight = WORLD.width) {
@@ -1704,19 +932,11 @@ function drawMiddlegroundVoxelConnector(image, parallax, scale, bg1BottomY) {
 function getLayerAtWorldY(worldY) {
   const invScale = 1 / foreground.scale;
   for (const layer of foregroundLayers) {
-    if (gameMode === "TTC" && layer.name === "foregroundlower3.png" && !ttcLower3Solid) {
-      continue;
-    }
     const fy = Math.round((worldY - layer.y) * invScale);
     if (fy >= 0 && fy < layer.height) {
       return { layer, fy };
     }
-    if (
-      ttcLower3CollisionRepeats &&
-      gameMode === "TTC" &&
-      layer.name === "foregroundlower3.png" &&
-      worldY >= layer.y
-    ) {
+    if (gameMode === "TTC" && layer.name === "foregroundlower3.png" && worldY >= layer.y) {
       const wrappedFy = ((fy % layer.height) + layer.height) % layer.height;
       return { layer, fy: wrappedFy };
     }
@@ -1760,19 +980,11 @@ function getLayerChunk(layer, tileIndex, rowIndex, create) {
 }
 
 function sampleLayerAtWorld(layer, worldX, worldY) {
-  if (gameMode === "TTC" && layer.name === "foregroundlower3.png" && !ttcLower3Solid) {
-    return 0;
-  }
   const invScale = 1 / foreground.scale;
   let fy = Math.round((worldY - layer.y) * invScale);
   const tileH = layer.height * layer.scale;
   const rowIndex = Math.floor((worldY - layer.y) / tileH);
-  if (
-    ttcLower3CollisionRepeats &&
-    gameMode === "TTC" &&
-    layer.name === "foregroundlower3.png" &&
-    worldY >= layer.y
-  ) {
+  if (gameMode === "TTC" && layer.name === "foregroundlower3.png" && worldY >= layer.y) {
     fy = ((fy % layer.height) + layer.height) % layer.height;
   } else if (fy < 0 || fy >= layer.height) {
     return 0;
@@ -1783,7 +995,7 @@ function sampleLayerAtWorld(layer, worldX, worldY) {
   const chunk = getLayerChunk(
     layer,
     tileIndex,
-    ttcLower3CollisionRepeats && gameMode === "TTC" && layer.name === "foregroundlower3.png" ? rowIndex : 0,
+    gameMode === "TTC" && layer.name === "foregroundlower3.png" ? rowIndex : 0,
     false
   );
   const mask = chunk ? chunk.mask : layer.baseMask;
@@ -1803,7 +1015,7 @@ function digAtWorld(worldX, worldY, radius) {
     const fxCenter = getLayerLocalX(layer, worldX, tileIndex);
     const tileH = layer.height * layer.scale;
     const rowIndex =
-      ttcLower3CollisionRepeats && gameMode === "TTC" && layer.name === "foregroundlower3.png"
+      gameMode === "TTC" && layer.name === "foregroundlower3.png"
         ? Math.floor((worldY - layer.y) / tileH)
         : 0;
     const chunk = getLayerChunk(layer, tileIndex, rowIndex, true);
@@ -1934,7 +1146,6 @@ function getPropCollisionInfo(prop, testX, testY) {
   const invScale = 1 / type.scale;
   const padding = 1;
   const scale = getPlayerScale();
-  const planetPlacement = getPlanetPropPlacement(prop);
 
   const solidPixels = frogSolidPixelsDeformed || frogSolidPixels;
   for (const p of solidPixels) {
@@ -1944,31 +1155,12 @@ function getPropCollisionInfo(prop, testX, testY) {
     const wx = testX + lx * cos - ly * sin;
     const wy = testY + lx * sin + ly * cos;
 
-    let fx = 0;
-    let fy = 0;
-    let nx = 0;
-    let ny = 0;
-    if (planetPlacement) {
-      const c = Math.cos(planetPlacement.angle);
-      const s = Math.sin(planetPlacement.angle);
-      const dxp = wx - planetPlacement.cx;
-      const dyp = wy - planetPlacement.cy;
-      const lxP = dxp * c + dyp * s;
-      const lyP = -dxp * s + dyp * c;
-      fx = Math.round(lxP * invScale + type.width / 2);
-      fy = Math.round(lyP * invScale + type.height / 2);
-      if (!samplePropMaskLoose(type, fx, fy, padding)) continue;
-      const nxL = samplePropMask(type, fx - 1, fy) - samplePropMask(type, fx + 1, fy);
-      const nyL = samplePropMask(type, fx, fy - 1) - samplePropMask(type, fx, fy + 1);
-      nx = nxL * c - nyL * s;
-      ny = nxL * s + nyL * c;
-    } else {
-      fx = Math.round((wx - prop.x) * invScale);
-      fy = Math.round((wy - prop.y) * invScale);
-      if (!samplePropMaskLoose(type, fx, fy, padding)) continue;
-      nx = samplePropMask(type, fx - 1, fy) - samplePropMask(type, fx + 1, fy);
-      ny = samplePropMask(type, fx, fy - 1) - samplePropMask(type, fx, fy + 1);
-    }
+    const fx = Math.round((wx - prop.x) * invScale);
+    const fy = Math.round((wy - prop.y) * invScale);
+    if (!samplePropMaskLoose(type, fx, fy, padding)) continue;
+
+    const nx = samplePropMask(type, fx - 1, fy) - samplePropMask(type, fx + 1, fy);
+    const ny = samplePropMask(type, fx, fy - 1) - samplePropMask(type, fx, fy + 1);
     let normalX = nx;
     let normalY = ny;
     const nLen = Math.hypot(normalX, normalY);
@@ -2008,6 +1200,7 @@ function getAsteroidCollisionInfo(asteroid, testX, testY) {
   const padding = 1;
   const playerScale = getPlayerScale();
   const solidPixels = frogSolidPixelsDeformed || frogSolidPixels;
+
   for (const p of solidPixels) {
     const lx = (p.x - frogHalfWidth) * playerScale;
     const ly = (p.y - frogHalfHeight) * playerScale;
@@ -2059,10 +1252,6 @@ function getAsteroidCollisionInfo(asteroid, testX, testY) {
 }
 
 function getCollisionInfo(testX, testY) {
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    const planetHit = getPlanetCollisionInfo(testX, testY);
-    return planetHit;
-  }
   if (!frogSolidPixels || !foregroundLayers.length) return { hit: false };
   const cos = Math.cos(player.angle);
   const sin = Math.sin(player.angle);
@@ -2280,118 +1469,6 @@ function updateSquish(dt) {
   }
 }
 
-function updateHinges(dt) {
-  if (!frogBaseImageData || !frogSquishCanvas || !frogPartsMap || !frogPartsCollision || !frogPartsRenderToCollision) {
-    return;
-  }
-  if (debugState.noSquish) {
-    squishState.value = 0;
-    frogSolidPixelsDeformed = null;
-    return;
-  }
-
-  squishState.value *= Math.exp(-8 * dt);
-  if (squishState.value < 0.001) {
-    squishState.value = 0;
-    frogSolidPixelsDeformed = null;
-    return;
-  }
-
-  const currentAmount = squishState.value;
-  squishState.lastRenderedAmount = currentAmount;
-
-  const cos = Math.cos(player.angle);
-  const sin = Math.sin(player.angle);
-  const n = squishState.normal;
-  const normalLocal = {
-    x: n.x * cos + n.y * sin,
-    y: -n.x * sin + n.y * cos,
-  };
-
-  const w = frogImage.width * frogSquishScale;
-  const h = frogImage.height * frogSquishScale;
-  const src = frogBaseImageData.data;
-  const out = frogSquishOutput.data;
-  const outW = frogSquishCanvas.width;
-  const outH = frogSquishCanvas.height;
-
-  const maxAngle = 1.35;
-  const angleAmount = Math.pow(currentAmount, 0.7);
-  const hingeSmooth = 18;
-  const hingeT = 1 - Math.exp(-hingeSmooth * dt);
-  for (const part of frogPartsCollision) {
-    const leverLen = part.leverLen || 1;
-    const alignment = (part.lever.x * normalLocal.x + part.lever.y * normalLocal.y) / leverLen;
-    const flexBoost = 0.5 + part.flex * 0.9;
-    part.targetAngle = -alignment * maxAngle * angleAmount * flexBoost;
-    part.angle += (part.targetAngle - part.angle) * hingeT;
-    part.cos = Math.cos(part.angle);
-    part.sin = Math.sin(part.angle);
-  }
-
-  for (let i = 0; i < out.length; i += 4) {
-    out[i + 0] = 0;
-    out[i + 1] = 0;
-    out[i + 2] = 0;
-    out[i + 3] = 0;
-  }
-
-  for (let y = 0; y < h; y += 1) {
-    for (let x = 0; x < w; x += 1) {
-      const idx = y * w + x;
-      const srcIdx = idx * 4;
-      if (src[srcIdx + 3] === 0) continue;
-
-      let sx = x;
-      let sy = y;
-      const partId = frogPartsMap[idx];
-      if (partId >= 0) {
-        const renderPart = frogParts[partId];
-        const collisionId = frogPartsRenderToCollision[partId];
-        const collisionPart = collisionId !== undefined ? frogPartsCollision[collisionId] : null;
-        const cosR = collisionPart ? collisionPart.cos : 1;
-        const sinR = collisionPart ? collisionPart.sin : 0;
-        const dx = x - renderPart.pivot.x;
-        const dy = y - renderPart.pivot.y;
-        sx = renderPart.pivot.x + dx * cosR + dy * sinR;
-        sy = renderPart.pivot.y - dx * sinR + dy * cosR;
-      }
-
-      const ox = Math.round(sx + frogSquishPad);
-      const oy = Math.round(sy + frogSquishPad);
-      if (ox < 0 || oy < 0 || ox >= outW || oy >= outH) continue;
-      const outIdx = (oy * outW + ox) * 4;
-      out[outIdx + 0] = src[srcIdx + 0];
-      out[outIdx + 1] = src[srcIdx + 1];
-      out[outIdx + 2] = src[srcIdx + 2];
-      out[outIdx + 3] = src[srcIdx + 3];
-    }
-  }
-
-  frogSquishCtx.putImageData(frogSquishOutput, 0, 0);
-
-  if (frogSolidPixelsBase) {
-    const deformed = [];
-    for (const p of frogSolidPixelsBase) {
-      let x = p.x;
-      let y = p.y;
-      const idx = y * frogPartsCollisionMap.width + x;
-      const partId = frogPartsCollisionMap.map[idx];
-      if (partId >= 0) {
-        const part = frogPartsCollision[partId];
-        const dx = x - part.pivot.x;
-        const dy = y - part.pivot.y;
-        const rx = part.pivot.x + dx * part.cos + dy * part.sin;
-        const ry = part.pivot.y - dx * part.sin + dy * part.cos;
-        x = rx;
-        y = ry;
-      }
-      deformed.push({ x, y });
-    }
-    frogSolidPixelsDeformed = deformed;
-  }
-}
-
 function drawAimLine() {
   let dx = 0;
   let dy = 0;
@@ -2413,9 +1490,8 @@ function drawAimLine() {
     mag = Math.hypot(dx, dy);
     forceScale = 1.5;
   } else if (pointerLocked && swipeHeld) {
-    const worldSwipe = rotateScreenVectorToWorld(-moveAccumX, -moveAccumY);
-    dx = worldSwipe.x;
-    dy = worldSwipe.y;
+    dx = -moveAccumX;
+    dy = -moveAccumY;
     mag = Math.hypot(dx, dy);
     forceScale = 0.8;
   } else {
@@ -2440,9 +1516,8 @@ function drawAimLine() {
   const dirY = dy / mag;
   const angle = Math.atan2(dirY, dirX) + Math.PI / 2;
 
-  const playerScreen = worldToScreen({ x: player.x, y: player.y });
-  const playerScreenX = playerScreen.x;
-  const playerScreenY = playerScreen.y;
+  const playerScreenX = (player.x - camera.x) * camera.zoom;
+  const playerScreenY = (player.y - camera.y) * camera.zoom;
   const forceMag = clampedMag * forceScale;
   const playerScale = getPlayerScale();
   const maxOffset = 48 * playerScale;
@@ -2461,11 +1536,9 @@ function drawAimLine() {
   ctx.restore();
 
   // Trajectory preview
-  const planetGravityActive = planetSpriteCollision.enabled && planetSpriteCollision.ready;
   const gravityT = Math.min(1, Math.max(0, -camera.y / 4800));
   const gravityScale = 1 - gravityT * 0.99;
   const gravity = WORLD.gravity * gravityScale;
-  const planetGravity = planetSpriteCollision.gravityStrength;
   const step = 0.08;
   const steps = 18;
   let px = player.x;
@@ -2477,13 +1550,7 @@ function drawAimLine() {
   for (let i = 0; i < steps; i += 1) {
     vx *= WORLD.airDrag;
     vy *= WORLD.airDrag;
-    if (planetGravityActive) {
-      const gDir = getGravityDirectionAt(px, py);
-      vx += gDir.x * planetGravity * step;
-      vy += gDir.y * planetGravity * step;
-    } else {
-      vy += gravity * step;
-    }
+    vy += gravity * step;
     px += vx * step;
     py += vy * step;
     let propHit = false;
@@ -2504,9 +1571,8 @@ function drawAimLine() {
       }
       if (propHit) break;
     }
-    const pScreen = worldToScreen({ x: px, y: py });
-    const sx = pScreen.x;
-    const sy = pScreen.y;
+    const sx = (px - camera.x) * camera.zoom;
+    const sy = (py - camera.y) * camera.zoom;
     ctx.fillRect(sx - 2, sy - 2, 3, 3);
   }
 }
@@ -2515,33 +1581,18 @@ function drawPropsAndDrops() {
   for (const prop of props) {
     const img = prop.type.image;
     if (!img.complete) continue;
-    const placement = getPlanetPropPlacement(prop);
-    if (placement) {
-      ctx.save();
-      ctx.translate(placement.cx, placement.cy);
-      ctx.rotate(placement.angle);
-      ctx.drawImage(img, -placement.w / 2, -placement.h / 2, placement.w, placement.h);
-      ctx.restore();
-    } else {
-      const w = img.width * prop.type.scale;
-      const h = img.height * prop.type.scale;
-      const mapped = mapWorldToPlanet(prop.x + w / 2, prop.y + h / 2);
-      ctx.save();
-      ctx.translate(mapped.x, mapped.y);
-      ctx.rotate(mapped.angle);
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      ctx.restore();
-    }
+    const w = img.width * prop.type.scale;
+    const h = img.height * prop.type.scale;
+    ctx.drawImage(img, prop.x, prop.y, w, h);
   }
 
   if (woodImage.complete) {
     for (const drop of woodDrops) {
       const w = woodImage.width;
       const h = woodImage.height;
-      const mapped = mapWorldToPlanet(drop.x, drop.y);
       ctx.save();
-      ctx.translate(mapped.x, mapped.y);
-      ctx.rotate(drop.angle + mapped.angle);
+      ctx.translate(drop.x, drop.y);
+      ctx.rotate(drop.angle);
       ctx.drawImage(woodImage, -w / 2, -h / 2, w, h);
       ctx.restore();
     }
@@ -2610,9 +1661,6 @@ function drawHitboxes() {
 }
 
 function drawInventoryUI() {
-  if (!enablePackSystem && inventoryTab === "packs") {
-    inventoryTab = "items";
-  }
   const invTarget = inventoryOpen ? 1 : 0;
   inventoryAnim += (invTarget - inventoryAnim) * 0.2;
   if (inventoryAnim < 0.01 && !inventoryOpen) return;
@@ -2639,16 +1687,23 @@ function drawInventoryUI() {
   const tabW = 110;
   const tabH = 24;
   const tabY = panelY + 8;
-  const itemsTabX = panelX + panelW - tabW - 16;
-  ctx.fillStyle = "#1d2233";
+  const itemsTabX = panelX + panelW - tabW * 2 - 16;
+  const packsTabX = panelX + panelW - tabW - 8;
+  ctx.fillStyle = inventoryTab === "items" ? "#1d2233" : "#0f1424";
   ctx.fillRect(itemsTabX, tabY, tabW, tabH);
   ctx.strokeStyle = "#9fb2ff";
   ctx.strokeRect(itemsTabX, tabY, tabW, tabH);
   ctx.fillStyle = "#ffffff";
   ctx.font = "12px \"IBM Plex Mono\", ui-monospace, monospace";
   ctx.fillText("Items", itemsTabX + 30, tabY + 16);
+  ctx.fillStyle = inventoryTab === "packs" ? "#1d2233" : "#0f1424";
+  ctx.fillRect(packsTabX, tabY, tabW, tabH);
+  ctx.strokeStyle = "#9fb2ff";
+  ctx.strokeRect(packsTabX, tabY, tabW, tabH);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("Packs", packsTabX + 30, tabY + 16);
   drawInventoryUI.itemsTabBounds = { x: itemsTabX, y: tabY, w: tabW, h: tabH };
-  drawInventoryUI.packsTabBounds = null;
+  drawInventoryUI.packsTabBounds = { x: packsTabX, y: tabY, w: tabW, h: tabH };
 
   const slotW = 90;
   const slotH = 90;
@@ -2674,7 +1729,7 @@ function drawInventoryUI() {
   ctx.fillStyle = "#9fb2ff";
   ctx.fillText("Sell", slotX + slotW / 2 - 12, slotY + slotH + 16);
 
-  if (inventoryTab === "items" || !enablePackSystem) {
+  if (inventoryTab === "items") {
     const listX = slotX + slotW + 24;
     const listY = slotY;
     const lineH = 20;
@@ -2706,7 +1761,7 @@ function drawInventoryUI() {
       ctx.fillStyle = "#9fb2ff";
       ctx.fillText("Click item to sell", listX, listY + lineH * (row + 0.5));
     }
-  } else if (enablePackSystem) {
+  } else {
     const listX = slotX + slotW + 24;
     const listY = slotY;
     const lineH = 20;
@@ -2774,71 +1829,64 @@ function drawInventoryUI() {
   ctx.restore();
   drawInventoryUI.shopTabBounds = { x: tabX, y: shopTabY, w: shopTabW, h: shopTabH };
 
-  if (enableInventorySkinTab) {
-    const skinTabW = 28;
-    const skinTabH = 90;
-    const skinTabX = skinTabState.anim * (skinTabW + 12) - 8;
-    const skinTabY = panelY + panelH * 0.25;
-    const skinTarget = skinTabState.open ? 1 : 0;
-    skinTabState.anim += (skinTarget - skinTabState.anim) * 0.18;
-    ctx.fillStyle = "#101522";
-    ctx.fillRect(skinTabX, skinTabY, skinTabW, skinTabH);
-    ctx.strokeStyle = "#9fb2ff";
-    ctx.strokeRect(skinTabX, skinTabY, skinTabW, skinTabH);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "12px \"IBM Plex Mono\", ui-monospace, monospace";
+  const skinTabW = 28;
+  const skinTabH = 90;
+  const skinTabX = skinTabState.anim * (skinTabW + 12) - 8;
+  const skinTabY = panelY + panelH * 0.25;
+  const skinTarget = skinTabState.open ? 1 : 0;
+  skinTabState.anim += (skinTarget - skinTabState.anim) * 0.18;
+  ctx.fillStyle = "#101522";
+  ctx.fillRect(skinTabX, skinTabY, skinTabW, skinTabH);
+  ctx.strokeStyle = "#9fb2ff";
+  ctx.strokeRect(skinTabX, skinTabY, skinTabW, skinTabH);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px \"IBM Plex Mono\", ui-monospace, monospace";
+  ctx.save();
+  ctx.translate(skinTabX + skinTabW / 2, skinTabY + skinTabH / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText("SKIN", 0, 4);
+  ctx.restore();
+  drawInventoryUI.skinTabBounds = { x: skinTabX, y: skinTabY, w: skinTabW + 8, h: skinTabH };
+
+  if (skinTabState.anim > 0.01) {
+    const skinPanelW = 240;
+    const skinPanelH = panelH;
+    const skinPanelX = -skinPanelW + skinTabState.anim * skinPanelW;
+    const skinPanelY = panelY;
     ctx.save();
-    ctx.translate(skinTabX + skinTabW / 2, skinTabY + skinTabH / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.fillText("SKIN", 0, 4);
-    ctx.restore();
-    drawInventoryUI.skinTabBounds = { x: skinTabX, y: skinTabY, w: skinTabW + 8, h: skinTabH };
+    ctx.globalAlpha = skinTabState.anim;
+    ctx.fillStyle = "#0f1422";
+    ctx.fillRect(skinPanelX, skinPanelY, skinPanelW, skinPanelH);
+    ctx.strokeStyle = "#9fb2ff";
+    ctx.strokeRect(skinPanelX, skinPanelY, skinPanelW, skinPanelH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px \"IBM Plex Mono\", ui-monospace, monospace";
+    ctx.fillText("Skins", skinPanelX + 16, skinPanelY + 28);
 
-    if (skinTabState.anim > 0.01) {
-      const skinPanelW = 240;
-      const skinPanelH = panelH;
-      const skinPanelX = -skinPanelW + skinTabState.anim * skinPanelW;
-      const skinPanelY = panelY;
-      ctx.save();
-      ctx.globalAlpha = skinTabState.anim;
-      ctx.fillStyle = "#0f1422";
-      ctx.fillRect(skinPanelX, skinPanelY, skinPanelW, skinPanelH);
+    const buttonW = skinPanelW - 32;
+    const buttonH = 34;
+    const startY = skinPanelY + 52;
+    const gap = 10;
+    drawInventoryUI.skinRowBounds = [];
+    skins.forEach((skin, index) => {
+      const y = startY + index * (buttonH + gap);
+      ctx.fillStyle = skin.id === currentSkin ? "#1b3b2f" : "#1d2233";
+      ctx.fillRect(skinPanelX + 16, y, buttonW, buttonH);
       ctx.strokeStyle = "#9fb2ff";
-      ctx.strokeRect(skinPanelX, skinPanelY, skinPanelW, skinPanelH);
+      ctx.strokeRect(skinPanelX + 16, y, buttonW, buttonH);
       ctx.fillStyle = "#ffffff";
-      ctx.font = "16px \"IBM Plex Mono\", ui-monospace, monospace";
-      ctx.fillText("Skins", skinPanelX + 16, skinPanelY + 28);
-
-      const buttonW = skinPanelW - 32;
-      const buttonH = 34;
-      const startY = skinPanelY + 52;
-      const gap = 10;
-      drawInventoryUI.skinRowBounds = [];
-      skins.forEach((skin, index) => {
-        const y = startY + index * (buttonH + gap);
-        ctx.fillStyle = skin.id === currentSkin ? "#1b3b2f" : "#1d2233";
-        ctx.fillRect(skinPanelX + 16, y, buttonW, buttonH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(skinPanelX + 16, y, buttonW, buttonH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "13px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText(skin.label, skinPanelX + 28, y + 22);
-        drawInventoryUI.skinRowBounds.push({
-          x: skinPanelX + 16,
-          y,
-          w: buttonW,
-          h: buttonH,
-          skinId: skin.id,
-        });
+      ctx.font = "13px \"IBM Plex Mono\", ui-monospace, monospace";
+      ctx.fillText(skin.label, skinPanelX + 28, y + 22);
+      drawInventoryUI.skinRowBounds.push({
+        x: skinPanelX + 16,
+        y,
+        w: buttonW,
+        h: buttonH,
+        skinId: skin.id,
       });
-      ctx.restore();
-    } else {
-      drawInventoryUI.skinRowBounds = null;
-    }
+    });
+    ctx.restore();
   } else {
-    skinTabState.open = false;
-    skinTabState.anim = 0;
-    drawInventoryUI.skinTabBounds = null;
     drawInventoryUI.skinRowBounds = null;
   }
 
@@ -2895,18 +1943,9 @@ function drawInventoryUI() {
     ctx.fillStyle = "#ffffff";
     ctx.font = "16px \"IBM Plex Mono\", ui-monospace, monospace";
     ctx.fillText("Skins", rowX + 16, skinsY + 28);
-    const openSkinW = 260;
-    const openSkinH = 44;
-    const openSkinX = rowX + 16;
-    const openSkinY = skinsY + 40;
-    ctx.fillStyle = "#1d2233";
-    ctx.fillRect(openSkinX, openSkinY, openSkinW, openSkinH);
-    ctx.strokeStyle = "#9fb2ff";
-    ctx.strokeRect(openSkinX, openSkinY, openSkinW, openSkinH);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-    ctx.fillText("Open Skin Viewer", openSkinX + 12, openSkinY + 28);
-    drawInventoryUI.skinViewerOpenBounds = { x: openSkinX, y: openSkinY, w: openSkinW, h: openSkinH };
+    ctx.fillStyle = "#9fb2ff";
+    ctx.font = "13px \"IBM Plex Mono\", ui-monospace, monospace";
+    ctx.fillText("Coming soon", rowX + 16, skinsY + 60);
 
     const debugY = skinsY + rowH + rowGap;
     ctx.fillStyle = "#111a2b";
@@ -2996,39 +2035,35 @@ function drawInventoryUI() {
     ctx.fillText(`Hitboxes: ${debugState.showHitboxes ? "ON" : "OFF"}`, toggleX + 10, hitboxY + 22);
     drawInventoryUI.hitboxBounds = { x: toggleX, y: hitboxY, w: toggleW, h: toggleH };
 
-    if (enablePackSystem) {
-      const packsY = hitboxY + toggleH + toggleGap;
-      ctx.fillStyle = "#111a2b";
-      ctx.fillRect(rowX, packsY, rowW, rowH);
-      ctx.strokeStyle = "#9fb2ff";
-      ctx.strokeRect(rowX, packsY, rowW, rowH);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "16px \"IBM Plex Mono\", ui-monospace, monospace";
-      ctx.fillText("Packs", rowX + 16, packsY + 28);
+    const packsY = hitboxY + toggleH + toggleGap;
+    ctx.fillStyle = "#111a2b";
+    ctx.fillRect(rowX, packsY, rowW, rowH);
+    ctx.strokeStyle = "#9fb2ff";
+    ctx.strokeRect(rowX, packsY, rowW, rowH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px \"IBM Plex Mono\", ui-monospace, monospace";
+    ctx.fillText("Packs", rowX + 16, packsY + 28);
 
-      const packButtonW = 220;
-      const packButtonH = 44;
-      const packButtonX = rowX + 16;
-      const packButtonY = packsY + 40;
-      const currentPack = packs[shopState.level % packs.length];
-      const packPrice = currentPack.price;
-      ctx.fillStyle = "#1d2233";
-      ctx.fillRect(packButtonX, packButtonY, packButtonW, packButtonH);
-      ctx.strokeStyle = "#9fb2ff";
-      ctx.strokeRect(packButtonX, packButtonY, packButtonW, packButtonH);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-      ctx.fillText(`Open ${currentPack.label}`, packButtonX + 10, packButtonY + 28);
-      if (coinImage.complete) {
-        const coinW = coinImage.width * 1.5;
-        const coinH = coinImage.height * 1.5;
-        ctx.drawImage(coinImage, packButtonX + packButtonW - 58, packButtonY + 12, coinW, coinH);
-      }
-      ctx.fillText(`${packPrice}`, packButtonX + packButtonW - 28, packButtonY + 28);
-      drawInventoryUI.packOpenBounds = { x: packButtonX, y: packButtonY, w: packButtonW, h: packButtonH, packId: currentPack.id };
-    } else {
-      drawInventoryUI.packOpenBounds = null;
+    const packButtonW = 220;
+    const packButtonH = 44;
+    const packButtonX = rowX + 16;
+    const packButtonY = packsY + 40;
+    const currentPack = packs[shopState.level % packs.length];
+    const packPrice = currentPack.price;
+    ctx.fillStyle = "#1d2233";
+    ctx.fillRect(packButtonX, packButtonY, packButtonW, packButtonH);
+    ctx.strokeStyle = "#9fb2ff";
+    ctx.strokeRect(packButtonX, packButtonY, packButtonW, packButtonH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
+    ctx.fillText(`Open ${currentPack.label}`, packButtonX + 10, packButtonY + 28);
+    if (coinImage.complete) {
+      const coinW = coinImage.width * 1.5;
+      const coinH = coinImage.height * 1.5;
+      ctx.drawImage(coinImage, packButtonX + packButtonW - 58, packButtonY + 12, coinW, coinH);
     }
+    ctx.fillText(`${packPrice}`, packButtonX + packButtonW - 28, packButtonY + 28);
+    drawInventoryUI.packOpenBounds = { x: packButtonX, y: packButtonY, w: packButtonW, h: packButtonH, packId: currentPack.id };
 
     const closeW = 28;
     const closeH = 28;
@@ -3047,246 +2082,10 @@ function drawInventoryUI() {
     ctx.stroke();
     drawInventoryUI.shopCloseBounds = { x: closeX, y: closeY, w: closeW, h: closeH };
 
-    if (skinViewerState.open) {
-      ensureSkinViewerPreview();
-      const now = performance.now();
-      const sim = skinViewerState.sim;
-      const dt = sim.lastTime ? Math.min(0.033, (now - sim.lastTime) / 1000) : 1 / 60;
-      sim.lastTime = now;
-      const viewerW = Math.min(760, shopW - 120);
-      const viewerH = Math.min(460, shopH - 120);
-      const viewerX = (shopW - viewerW) / 2;
-      const viewerY = (shopH - viewerH) / 2;
-      const previewX = viewerX + 24;
-      const previewY = viewerY + 74;
-      const previewW = viewerW - 48;
-      const previewH = viewerH - 160;
-
-      const skin = skins[skinViewerState.index] || null;
-      const preview = skinViewerState.preview;
-      const img = preview && preview.image && preview.image.complete ? preview.image : null;
-      if (img && img.width && img.height) {
-        const scale = Math.min((previewW * 0.7) / img.width, (previewH * 0.7) / img.height);
-        const sw = img.width * scale;
-        const sh = img.height * scale;
-        if (sim.x === 0 && sim.y === 0) {
-          sim.x = previewX + previewW * 0.5;
-          sim.y = previewY + previewH * 0.45;
-        }
-        sim.vy += 520 * dt;
-        sim.vx *= 0.995;
-        sim.vy *= 0.995;
-        sim.x += sim.vx * dt;
-        sim.y += sim.vy * dt;
-        sim.angle += sim.angVel * dt;
-        sim.angVel *= 0.998;
-
-        const minX = previewX + sw * 0.5;
-        const maxX = previewX + previewW - sw * 0.5;
-        const minY = previewY + sh * 0.5;
-        const maxY = previewY + previewH - sh * 0.5;
-        if (sim.x < minX) {
-          sim.x = minX;
-          sim.vx = Math.abs(sim.vx) * 0.75;
-          sim.impactX = 1;
-          sim.impactY = 0;
-          sim.impactStrength = Math.min(1.5, Math.abs(sim.vx) / 180);
-          sim.angVel += 1.2;
-        }
-        if (sim.x > maxX) {
-          sim.x = maxX;
-          sim.vx = -Math.abs(sim.vx) * 0.75;
-          sim.impactX = -1;
-          sim.impactY = 0;
-          sim.impactStrength = Math.min(1.5, Math.abs(sim.vx) / 180);
-          sim.angVel -= 1.2;
-        }
-        if (sim.y < minY) {
-          sim.y = minY;
-          sim.vy = Math.abs(sim.vy) * 0.72;
-          sim.impactX = 0;
-          sim.impactY = 1;
-          sim.impactStrength = Math.min(1.5, Math.abs(sim.vy) / 220);
-          sim.angVel += (Math.random() - 0.5) * 0.8;
-        }
-        if (sim.y > maxY) {
-          sim.y = maxY;
-          sim.vy = -Math.abs(sim.vy) * 0.72;
-          sim.impactX = 0;
-          sim.impactY = -1;
-          sim.impactStrength = Math.min(1.5, Math.abs(sim.vy) / 220);
-          sim.angVel += (Math.random() - 0.5) * 1.1;
-        }
-        sim.impactStrength *= Math.exp(-5 * dt);
-
-        ctx.fillStyle = "rgba(8, 12, 20, 0.98)";
-        ctx.fillRect(viewerX, viewerY, viewerW, viewerH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(viewerX, viewerY, viewerW, viewerH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "18px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText("Skin Viewer", viewerX + 20, viewerY + 32);
-        ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText(`${skin ? skin.label : "Skin"} (${skinViewerState.index + 1}/${skins.length})`, viewerX + 20, viewerY + 54);
-
-        const leftW = 44;
-        const leftH = 44;
-        const leftX = viewerX + 20;
-        const leftY = viewerY + viewerH - 64;
-        const rightX = viewerX + 76;
-        const rightY = leftY;
-        const equipW = 150;
-        const equipH = 44;
-        const equipX = viewerX + viewerW - equipW - 20;
-        const equipY = leftY;
-        const closeVW = 28;
-        const closeVH = 28;
-        const closeVX = viewerX + viewerW - closeVW - 12;
-        const closeVY = viewerY + 10;
-
-        ctx.fillStyle = "#1d2233";
-        ctx.fillRect(leftX, leftY, leftW, leftH);
-        ctx.fillRect(rightX, rightY, leftW, leftH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(leftX, leftY, leftW, leftH);
-        ctx.strokeRect(rightX, rightY, leftW, leftH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "24px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText("<", leftX + 14, leftY + 31);
-        ctx.fillText(">", rightX + 14, rightY + 31);
-
-        ctx.fillStyle = skin && skin.id === currentSkin ? "#1b3b2f" : "#1d2233";
-        ctx.fillRect(equipX, equipY, equipW, equipH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(equipX, equipY, equipW, equipH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText(skin && skin.id === currentSkin ? "Equipped" : "Equip Skin", equipX + 20, equipY + 28);
-
-        ctx.fillStyle = "#1d2233";
-        ctx.fillRect(closeVX, closeVY, closeVW, closeVH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(closeVX, closeVY, closeVW, closeVH);
-        ctx.strokeStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.moveTo(closeVX + 7, closeVY + 7);
-        ctx.lineTo(closeVX + closeVW - 7, closeVY + closeVH - 7);
-        ctx.moveTo(closeVX + closeVW - 7, closeVY + 7);
-        ctx.lineTo(closeVX + 7, closeVY + closeVH - 7);
-        ctx.stroke();
-
-        drawInventoryUI.skinViewerLeftBounds = { x: leftX, y: leftY, w: leftW, h: leftH };
-        drawInventoryUI.skinViewerRightBounds = { x: rightX, y: rightY, w: leftW, h: leftH };
-        drawInventoryUI.skinViewerEquipBounds = { x: equipX, y: equipY, w: equipW, h: equipH };
-        drawInventoryUI.skinViewerCloseBounds = { x: closeVX, y: closeVY, w: closeVW, h: closeVH };
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(previewX, previewY, previewW, previewH);
-        ctx.clip();
-        ctx.translate(sim.x, sim.y);
-        ctx.rotate(sim.angle);
-        const partsData = preview.partsData;
-        if (partsData && partsData.parts && partsData.canvases && partsData.canvases.length === partsData.parts.length) {
-          const maxAngle = 0.95;
-          const normalX = sim.impactX;
-          const normalY = sim.impactY;
-          for (let i = 0; i < partsData.parts.length; i += 1) {
-            const part = partsData.parts[i];
-            const leverLen = part.leverLen || 1;
-            const alignment = (part.lever.x * normalX + part.lever.y * normalY) / leverLen;
-            part.targetAngle = -alignment * maxAngle * sim.impactStrength * (0.5 + part.flex * 0.9);
-            part.angle += (part.targetAngle - part.angle) * (1 - Math.exp(-16 * dt));
-            const px = (-img.width / 2 + part.pivot.x) * scale;
-            const py = (-img.height / 2 + part.pivot.y) * scale;
-            ctx.save();
-            ctx.translate(px, py);
-            ctx.rotate(part.angle);
-            ctx.drawImage(partsData.canvases[i], -part.pivot.x * scale, -part.pivot.y * scale, img.width * scale, img.height * scale);
-            ctx.restore();
-          }
-        } else {
-          ctx.drawImage(img, -sw / 2, -sh / 2, sw, sh);
-        }
-        ctx.restore();
-      } else {
-        ctx.fillStyle = "rgba(8, 12, 20, 0.98)";
-        ctx.fillRect(viewerX, viewerY, viewerW, viewerH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(viewerX, viewerY, viewerW, viewerH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "18px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText("Skin Viewer", viewerX + 20, viewerY + 32);
-        ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText(`${skin ? skin.label : "Skin"} (${skinViewerState.index + 1}/${skins.length})`, viewerX + 20, viewerY + 54);
-        ctx.fillStyle = "#9fb2ff";
-        ctx.fillText("Loading preview...", viewerX + 20, viewerY + 94);
-
-        const leftW = 44;
-        const leftH = 44;
-        const leftX = viewerX + 20;
-        const leftY = viewerY + viewerH - 64;
-        const rightX = viewerX + 76;
-        const rightY = leftY;
-        const equipW = 150;
-        const equipH = 44;
-        const equipX = viewerX + viewerW - equipW - 20;
-        const equipY = leftY;
-        const closeVW = 28;
-        const closeVH = 28;
-        const closeVX = viewerX + viewerW - closeVW - 12;
-        const closeVY = viewerY + 10;
-        ctx.fillStyle = "#1d2233";
-        ctx.fillRect(leftX, leftY, leftW, leftH);
-        ctx.fillRect(rightX, rightY, leftW, leftH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(leftX, leftY, leftW, leftH);
-        ctx.strokeRect(rightX, rightY, leftW, leftH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "24px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText("<", leftX + 14, leftY + 31);
-        ctx.fillText(">", rightX + 14, rightY + 31);
-        ctx.fillStyle = "#1d2233";
-        ctx.fillRect(equipX, equipY, equipW, equipH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(equipX, equipY, equipW, equipH);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "14px \"IBM Plex Mono\", ui-monospace, monospace";
-        ctx.fillText("Equip Skin", equipX + 20, equipY + 28);
-        ctx.fillStyle = "#1d2233";
-        ctx.fillRect(closeVX, closeVY, closeVW, closeVH);
-        ctx.strokeStyle = "#9fb2ff";
-        ctx.strokeRect(closeVX, closeVY, closeVW, closeVH);
-        ctx.strokeStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.moveTo(closeVX + 7, closeVY + 7);
-        ctx.lineTo(closeVX + closeVW - 7, closeVY + closeVH - 7);
-        ctx.moveTo(closeVX + closeVW - 7, closeVY + 7);
-        ctx.lineTo(closeVX + 7, closeVY + closeVH - 7);
-        ctx.stroke();
-        drawInventoryUI.skinViewerLeftBounds = { x: leftX, y: leftY, w: leftW, h: leftH };
-        drawInventoryUI.skinViewerRightBounds = { x: rightX, y: rightY, w: leftW, h: leftH };
-        drawInventoryUI.skinViewerEquipBounds = { x: equipX, y: equipY, w: equipW, h: equipH };
-        drawInventoryUI.skinViewerCloseBounds = { x: closeVX, y: closeVY, w: closeVW, h: closeVH };
-      }
-    } else {
-      drawInventoryUI.skinViewerLeftBounds = null;
-      drawInventoryUI.skinViewerRightBounds = null;
-      drawInventoryUI.skinViewerEquipBounds = null;
-      drawInventoryUI.skinViewerCloseBounds = null;
-    }
-
     ctx.restore();
   } else {
     drawInventoryUI.shopBuyBounds = null;
     drawInventoryUI.shopCloseBounds = null;
-    drawInventoryUI.skinViewerOpenBounds = null;
-    drawInventoryUI.skinViewerLeftBounds = null;
-    drawInventoryUI.skinViewerRightBounds = null;
-    drawInventoryUI.skinViewerEquipBounds = null;
-    drawInventoryUI.skinViewerCloseBounds = null;
     drawInventoryUI.legDayBounds = null;
     drawInventoryUI.noSquishBounds = null;
     drawInventoryUI.noHingesBounds = null;
@@ -3439,54 +2238,22 @@ function drawLoadingScreen() {
 }
 
 function updateCamera(dt) {
-  if (debugState.freezeCamera) return;
-  const viewBlend = getPlanetViewBlend();
-  const spritePlanetActive = planetSpriteCollision.enabled && planetSpriteCollision.ready;
-  const centerBlend = spritePlanetActive
-    ? 0
-    : (planetWorld.enabled ? Math.pow(viewBlend, 0.6) : 0);
-  const baseZoom = 1.3;
-  const targetZoom = spritePlanetActive
-    ? baseZoom
-    : (baseZoom + (planetWorld.minZoom - baseZoom) * viewBlend);
-  camera.zoom += (targetZoom - camera.zoom) * (1 - Math.exp(-4 * dt));
+  const targetX = player.x - WORLD.width / (2 * camera.zoom);
+  const targetY = player.y - WORLD.height / (2 * camera.zoom);
+  const t = 1 - Math.exp(-camera.smooth * dt);
+  camera.x += (targetX - camera.x) * t;
+  camera.y += (targetY - camera.y) * t;
 
-  const playerTargetX = player.x - WORLD.width / (2 * camera.zoom);
-  const playerTargetY = player.y - WORLD.height / (2 * camera.zoom);
-  let centerTargetX = -WORLD.width / (2 * camera.zoom);
-  let centerTargetY = foreground.y + planetWorld.radius - WORLD.height / (2 * camera.zoom);
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    centerTargetX = planetSpriteCollision.centerX - WORLD.width / (2 * camera.zoom);
-    centerTargetY = planetSpriteCollision.centerY - WORLD.height / (2 * camera.zoom);
+  const bottomLimit = getCameraBottomLimit();
+  if (gameMode !== "TTC" && bottomLimit !== null && camera.y > bottomLimit) {
+    camera.y = bottomLimit;
   }
-  const targetX = playerTargetX + (centerTargetX - playerTargetX) * centerBlend;
-  const targetY = playerTargetY + (centerTargetY - playerTargetY) * centerBlend;
-  if (spritePlanetActive) {
-    camera.x = playerTargetX;
-    camera.y = playerTargetY;
-  } else {
-    const t = 1 - Math.exp(-camera.smooth * dt);
-    camera.x += (targetX - camera.x) * t;
-    camera.y += (targetY - camera.y) * t;
-  }
-  const g = getGravityDirectionAt(player.x, player.y);
-  // Keep screen-down aligned with gravity pull direction.
-  const rollTarget = Math.atan2(-g.x, g.y);
-  const rollDiff = Math.atan2(Math.sin(rollTarget - camera.roll), Math.cos(rollTarget - camera.roll));
-  camera.roll += rollDiff * (1 - Math.exp(-5 * dt));
 }
 
 function screenToWorld(point) {
-  const center = getCameraCenterWorld();
-  const ux = (point.x - WORLD.width / 2) / camera.zoom;
-  const uy = (point.y - WORLD.height / 2) / camera.zoom;
-  const cos = Math.cos(camera.roll);
-  const sin = Math.sin(camera.roll);
-  const dx = ux * cos - uy * sin;
-  const dy = ux * sin + uy * cos;
   return {
-    x: center.x + dx,
-    y: center.y + dy,
+    x: point.x / camera.zoom + camera.x,
+    y: point.y / camera.zoom + camera.y,
   };
 }
 
@@ -3494,20 +2261,10 @@ function update(dt) {
   const prevX = player.x;
   const prevY = player.y;
 
-  const gravityT = getAtmosphereBlendAt(player.x, player.y);
+  const gravityT = Math.min(1, Math.max(0, -camera.y / 4800));
   const gravityScale = 1 - gravityT * 0.99;
   const currentGravity = WORLD.gravity * gravityScale;
-  const planetGravityActive = planetSpriteCollision.enabled && planetSpriteCollision.ready;
-  let gravityDirX = 0;
-  let gravityDirY = 1;
-  if (planetGravityActive) {
-    const pc = getPlanetCenterWorld();
-    const gx = pc.x - player.x;
-    const gy = pc.y - player.y;
-    const gLen = Math.hypot(gx, gy) || 1;
-    gravityDirX = gx / gLen;
-    gravityDirY = gy / gLen;
-  }
+  const spaceT = Math.min(1, Math.max(0, (gravityT - 0.5) / 0.5));
 
   if (debugState.flyMode) {
     const moveX = (inputState.right ? 1 : 0) - (inputState.left ? 1 : 0);
@@ -3521,23 +2278,12 @@ function update(dt) {
     player.vx += move * walkAccel * dt;
     player.vx *= 0.9;
     if (inputState.up && isGrounded()) {
-      if (planetGravityActive) {
-        player.vx += -gravityDirX * 360;
-        player.vy += -gravityDirY * 360;
-      } else {
-        player.vy = -360 * gravityScale;
-      }
+      player.vy = -360 * gravityScale;
     }
   }
 
   if (!debugState.flyMode) {
-    if (planetGravityActive) {
-      const g = planetSpriteCollision.gravityStrength;
-      player.vx += gravityDirX * g * dt;
-      player.vy += gravityDirY * g * dt;
-    } else {
-      player.vy += currentGravity * dt;
-    }
+    player.vy += currentGravity * dt;
   }
   if (asteroids.length && asteroidMask && asteroidGravity.enabled) {
     const scale = 3;
@@ -3717,12 +2463,7 @@ function updatePropsAndDrops(dt) {
         const img = prop.type.image;
         const w = img.width * prop.type.scale;
         const h = img.height * prop.type.scale;
-        const placement = getPlanetPropPlacement(prop);
-        if (placement) {
-          spawnWoodDrops(placement.cx, placement.cy - h * 0.35, prop.type.wood);
-        } else {
-          spawnWoodDrops(prop.x + w / 2, prop.y + h * 0.2, prop.type.wood);
-        }
+        spawnWoodDrops(prop.x + w / 2, prop.y + h * 0.2, prop.type.wood);
         props.splice(i, 1);
       }
     }
@@ -3730,17 +2471,9 @@ function updatePropsAndDrops(dt) {
 
   for (let i = woodDrops.length - 1; i >= 0; i -= 1) {
     const drop = woodDrops[i];
-    const planetGravityActive = planetSpriteCollision.enabled && planetSpriteCollision.ready;
-    if (planetGravityActive) {
-      const gDir = getGravityDirectionAt(drop.x, drop.y);
-      const g = planetSpriteCollision.gravityStrength * 0.35;
-      drop.vx += gDir.x * g * dt;
-      drop.vy += gDir.y * g * dt;
-    } else {
-      const gravityT = Math.min(1, Math.max(0, -camera.y / 4800));
-      const gravityScale = 1 - gravityT * 0.99;
-      drop.vy += WORLD.gravity * 0.35 * gravityScale * dt;
-    }
+    const gravityT = Math.min(1, Math.max(0, -camera.y / 4800));
+    const gravityScale = 1 - gravityT * 0.99;
+    drop.vy += WORLD.gravity * 0.35 * gravityScale * dt;
     drop.vx *= 0.98;
     drop.vy *= 0.98;
     drop.x += drop.vx * dt;
@@ -3748,36 +2481,16 @@ function updatePropsAndDrops(dt) {
     drop.angle += drop.angularVelocity * dt;
     drop.angularVelocity *= 0.985;
 
-    if (planetGravityActive) {
-      if (samplePlanetDensitySmoothedAtWorld(drop.x, drop.y) >= 0.5) {
-        const normal = getPlanetSmoothNormalAtWorld(drop.x, drop.y);
-        const nx = normal.x;
-        const ny = normal.y;
-        for (let k = 0; k < 10 && samplePlanetDensitySmoothedAtWorld(drop.x, drop.y) >= 0.48; k += 1) {
-          drop.x += nx * 0.9;
-          drop.y += ny * 0.9;
-        }
-        const vn = drop.vx * nx + drop.vy * ny;
-        if (vn < 0) {
-          drop.vx -= vn * nx * 1.2;
-          drop.vy -= vn * ny * 1.2;
-        }
-        drop.vx *= 0.75;
-        drop.vy *= 0.75;
-        drop.angularVelocity += (Math.random() - 0.5) * 1.2;
-      }
-    } else {
-      const surfaceY = getSurfaceYAtX(drop.x);
-      if (surfaceY !== null && drop.y > surfaceY - 6) {
-        drop.y = surfaceY - 6;
-        const prevVy = drop.vy;
-        drop.vx *= 0.5;
-        drop.vy = -prevVy * 0.2;
-        drop.angularVelocity += (Math.random() - 0.5) * 2;
-        if (Math.abs(drop.vy) < 4) {
-          drop.vy = 0;
-          drop.angularVelocity *= 0.8;
-        }
+    const surfaceY = getSurfaceYAtX(drop.x);
+    if (surfaceY !== null && drop.y > surfaceY - 6) {
+      drop.y = surfaceY - 6;
+      const prevVy = drop.vy;
+      drop.vx *= 0.5;
+      drop.vy = -prevVy * 0.2;
+      drop.angularVelocity += (Math.random() - 0.5) * 2;
+      if (Math.abs(drop.vy) < 4) {
+        drop.vy = 0;
+        drop.angularVelocity *= 0.8;
       }
     }
 
@@ -3848,10 +2561,6 @@ function frame(time) {
   const t = time / 1000;
   const dt = Math.min(0.033, t - lastTime);
   lastTime = t;
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
 
   if (gameState === "title") {
     drawTitleScreen();
@@ -3869,36 +2578,9 @@ function frame(time) {
     return;
   }
 
-  updatePlanetActiveChunks();
   update(dt);
-  updateHinges(dt);
   updatePropsAndDrops(dt);
   updateCamera(dt);
-  const playerScreen = worldToScreen({ x: player.x, y: player.y });
-  const spaceBlend = getSpaceBlendAt(player.x, player.y);
-  const baseWorldSpaceScale = enableSpaceWorldShrink ? getSpaceWorldScaleAt(player.x, player.y) : 1;
-  const fitWorldScale = getPlanetFitWorldScaleAt(player.x, player.y);
-  const fitBlendScale = enableSpaceWorldShrink ? (1 + (fitWorldScale - 1) * spaceBlend) : 1;
-  const worldSpaceScale = Math.min(baseWorldSpaceScale, fitBlendScale);
-  let shrinkAnchorX = playerScreen.x;
-  let shrinkAnchorY = playerScreen.y;
-  if (enableSpaceWorldShrink && planetSpriteCollision.enabled && planetSpriteCollision.ready && spaceBlend > 0) {
-    const pc = getPlanetCenterWorld();
-    const planetScreen = worldToScreen({ x: pc.x, y: pc.y });
-    shrinkAnchorX = playerScreen.x + (planetScreen.x - playerScreen.x) * spaceBlend;
-    shrinkAnchorY = playerScreen.y + (planetScreen.y - playerScreen.y) * spaceBlend;
-  }
-
-  ctx.save();
-  ctx.translate(shrinkAnchorX, shrinkAnchorY);
-  ctx.scale(worldSpaceScale, worldSpaceScale);
-  ctx.translate(-shrinkAnchorX, -shrinkAnchorY);
-  ctx.translate(WORLD.width / 2, WORLD.height / 2);
-  ctx.rotate(camera.roll * 0);
-  ctx.translate(-WORLD.width / 2, -WORLD.height / 2);
-  const bgPad = Math.hypot(WORLD.width, WORLD.height);
-  const bgViewLeft = -bgPad;
-  const bgViewRight = WORLD.width + bgPad;
 
   drawParallax(-camera.y * 0.5);
   if (currentMap === "beach" && MAPS[currentMap].hasClouds) {
@@ -3906,33 +2588,30 @@ function frame(time) {
     if (cloudImages[0].complete) {
       const cloud1X = -camera.x * 0.2;
       const cloud1Y = -camera.y * 0.15 - 120;
-      drawTiledImageHorizontal(cloudImages[0], cloud1X, cloud1Y, cloudScale, bgViewLeft, bgViewRight);
+      drawTiledImageHorizontal(cloudImages[0], cloud1X, cloud1Y, cloudScale, 0, WORLD.width);
     }
     if (cloudImages[1].complete) {
       const cloud2X = -camera.x * 0.25;
       const cloud2Y = -camera.y * 0.18 - 40;
-      drawTiledImageHorizontal(cloudImages[1], cloud2X, cloud2Y, cloudScale, bgViewLeft, bgViewRight);
+      drawTiledImageHorizontal(cloudImages[1], cloud2X, cloud2Y, cloudScale, 0, WORLD.width);
     }
   }
   const bg2X = -camera.x * 0.4;
   const beachBg2Offset = currentMap === "beach" ? 150 : 0;
   const bg2Y = -camera.y * 0.4 + bg2.y + beachBg2Offset;
-  if (showBg2) {
-    drawTiledImageHorizontal(bg2Image, bg2X, bg2Y, bg2.scale, bgViewLeft, bgViewRight);
-  }
-  if (showBg1 && bg1Image.complete) {
+  drawTiledImageHorizontal(bg2Image, bg2X, bg2Y, bg2.scale, 0, WORLD.width);
+  if (bg1Image.complete) {
     const bg1X = -camera.x * 0.6;
     const bg1Y = -camera.y * 0.6 + bg1.y;
     const bg1H = bg1Image.height * bg1.scale;
-    drawTiledImageHorizontal(bg1Image, bg1X, bg1Y, bg1.scale, bgViewLeft, bgViewRight);
+    drawTiledImageHorizontal(bg1Image, bg1X, bg1Y, bg1.scale, 0, WORLD.width);
     if (currentMap && MAPS[currentMap].hasBg1Lower) {
-      drawTiledImageDown(bg1LowerImage, bg1X, bg1Y + bg1H, bg1.scale, bgViewLeft, bgViewRight, WORLD.height + bgPad);
+      drawTiledImageDown(bg1LowerImage, bg1X, bg1Y + bg1H, bg1.scale, 0, WORLD.width, WORLD.height);
     }
   }
-  const camCenter = getCameraCenterWorld();
-  const camSpaceBlend = getSpaceBlendAt(camCenter.x, camCenter.y);
+  const heightT = Math.min(1, Math.max(0, -camera.y / 4800));
   if (earthImage.complete) {
-    const earthAlpha = camSpaceBlend;
+    const earthAlpha = Math.min(1, Math.max(0, (heightT - 0.5) / 0.5));
     if (earthAlpha > 0) {
       const w = WORLD.width;
       const h = (earthImage.height / earthImage.width) * w;
@@ -3944,79 +2623,61 @@ function frame(time) {
       ctx.restore();
     }
   }
+  if (asteroids.length && asteroidImage.complete) {
+    const scale = 3;
+    const w = asteroidImage.width * scale;
+    const h = asteroidImage.height * scale;
+    for (const asteroid of asteroids) {
+      const sx = (asteroid.x - camera.x) * camera.zoom;
+      const sy = (asteroid.y - camera.y) * camera.zoom;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(asteroid.angle);
+      ctx.drawImage(asteroidImage, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    }
+  }
   if (enableMiddleground && currentMap && MAPS[currentMap].hasMiddleground && middlegroundImage.complete) {
     const bg1Y = -camera.y * 0.6 + bg1.y;
     const bg1H = bg1Image.height * bg1.scale;
     const bg1BottomY = bg1Y + bg1H;
     drawMiddlegroundVoxelConnector(middlegroundImage, 1, middleground.scale, bg1BottomY);
   }
-  ctx.restore();
   ctx.save();
-  const center = getCameraCenterWorld();
-  ctx.translate(WORLD.width / 2, WORLD.height / 2);
   ctx.scale(camera.zoom, camera.zoom);
-  ctx.rotate(-camera.roll);
-  ctx.translate(-center.x, -center.y);
-  if (planetSpriteCollision.enabled && planetImage.complete && planetSpriteCollision.ready) {
-    const bounds = getPlanetWorldBounds();
-    ctx.drawImage(planetImage, bounds.left, bounds.top, bounds.width, bounds.height);
-  }
-  if (asteroids.length && asteroidImage.complete) {
-    const scale = 3;
-    const w = asteroidImage.width * scale;
-    const h = asteroidImage.height * scale;
-    const cullRadius = getCameraCullRadiusWorld(Math.max(w, h));
-    const cullR2 = cullRadius * cullRadius;
-    for (const asteroid of asteroids) {
-      const dx = asteroid.x - center.x;
-      const dy = asteroid.y - center.y;
-      if (dx * dx + dy * dy > cullR2) continue;
-      ctx.save();
-      ctx.translate(asteroid.x, asteroid.y);
-      ctx.rotate(asteroid.angle);
-      ctx.drawImage(asteroidImage, -w / 2, -h / 2, w, h);
-      ctx.restore();
-    }
-  }
-  if (planetSpriteCollision.enabled && planetSpriteCollision.ready) {
-    // Planet sprite replaces foreground terrain rendering/collision in this mode.
-  } else if (planetWorld.enabled) {
-    drawForegroundCurved();
-  } else {
-    const cullRadius = getCameraCullRadiusWorld();
-    const viewLeft = center.x - cullRadius;
-    const viewRight = center.x + cullRadius;
-    const viewTop = center.y - cullRadius;
-    const viewBottom = center.y + cullRadius;
-    for (const layer of foregroundLayers) {
-      if (!layer.image.complete) continue;
-      const tileW = layer.width * layer.scale;
-      const startTile = Math.floor((viewLeft - layer.x) / tileW) - 1;
-      const endTile = Math.floor((viewRight - layer.x) / tileW) + 1;
-      const tileH = layer.height * layer.scale;
-      const startRow =
-        gameMode === "TTC" && layer.name === "foregroundlower3.png"
-          ? Math.max(0, Math.floor((viewTop - layer.y) / tileH) - 1)
-          : 0;
-      const endRow =
-        gameMode === "TTC" && layer.name === "foregroundlower3.png"
-          ? Math.floor((viewBottom - layer.y) / tileH) + 1
-          : 0;
+  ctx.translate(-camera.x, -camera.y);
+  for (const layer of foregroundLayers) {
+    if (!layer.image.complete) continue;
+    const tileW = layer.width * layer.scale;
+    const viewLeft = camera.x;
+    const viewRight = camera.x + WORLD.width / camera.zoom;
+    const startTile = Math.floor((viewLeft - layer.x) / tileW) - 1;
+    const endTile = Math.floor((viewRight - layer.x) / tileW) + 1;
+    const tileH = layer.height * layer.scale;
+    const viewTop = camera.y;
+    const viewBottom = camera.y + WORLD.height / camera.zoom;
+    const startRow =
+      gameMode === "TTC" && layer.name === "foregroundlower3.png"
+        ? Math.max(0, Math.floor((viewTop - layer.y) / tileH) - 1)
+        : 0;
+    const endRow =
+      gameMode === "TTC" && layer.name === "foregroundlower3.png"
+        ? Math.floor((viewBottom - layer.y) / tileH) + 1
+        : 0;
 
-      for (let tile = startTile; tile <= endTile; tile += 1) {
-        const x = layer.x + tile * tileW;
-        if (gameMode === "TTC" && layer.name === "foregroundlower3.png") {
-          for (let row = startRow; row <= endRow; row += 1) {
-            const chunk = getLayerChunk(layer, tile, row, false);
-            const source = chunk ? chunk.canvas : layer.image;
-            const y = layer.y + row * tileH;
-            ctx.drawImage(source, x, y, tileW, tileH);
-          }
-        } else {
-          const chunk = getLayerChunk(layer, tile, 0, false);
+    for (let tile = startTile; tile <= endTile; tile += 1) {
+      const x = layer.x + tile * tileW;
+      if (gameMode === "TTC" && layer.name === "foregroundlower3.png") {
+        for (let row = startRow; row <= endRow; row += 1) {
+          const chunk = getLayerChunk(layer, tile, row, false);
           const source = chunk ? chunk.canvas : layer.image;
-          ctx.drawImage(source, x, layer.y, tileW, tileH);
+          const y = layer.y + row * tileH;
+          ctx.drawImage(source, x, y, tileW, tileH);
         }
+      } else {
+        const chunk = getLayerChunk(layer, tile, 0, false);
+        const source = chunk ? chunk.canvas : layer.image;
+        ctx.drawImage(source, x, layer.y, tileW, tileH);
       }
     }
   }
@@ -4024,18 +2685,8 @@ function frame(time) {
     drawHitboxes();
   }
   drawPropsAndDrops();
-  ctx.restore();
-
-  // Draw player in a normal camera pass so space shrink never scales the player.
-  ctx.save();
-  const playerCenter = getCameraCenterWorld();
-  ctx.translate(WORLD.width / 2, WORLD.height / 2);
-  ctx.scale(camera.zoom, camera.zoom);
-  ctx.rotate(-camera.roll);
-  ctx.translate(-playerCenter.x, -playerCenter.y);
   drawPlayer();
   ctx.restore();
-
   if (!inventoryOpen) {
     drawAimLine();
   }
@@ -4056,9 +2707,6 @@ canvas.addEventListener("mousedown", (event) => {
     return;
   }
   if (inventoryOpen) {
-    if (pointerLocked) {
-      handleInventoryPointerAction(inventoryCursor.x, inventoryCursor.y);
-    }
     return;
   }
   if (pointerLocked) {
@@ -4078,10 +2726,8 @@ canvas.addEventListener("mousedown", (event) => {
 canvas.addEventListener("mousemove", (event) => {
   if (pointerLocked) {
     if (inventoryOpen) {
-      const mx = event.movementX || 0;
-      const my = event.movementY || 0;
-      inventoryCursor.x += mx;
-      inventoryCursor.y += my;
+      inventoryCursor.x += event.movementX || 0;
+      inventoryCursor.y += event.movementY || 0;
       inventoryCursor.x = Math.max(0, Math.min(WORLD.width - 1, inventoryCursor.x));
       inventoryCursor.y = Math.max(0, Math.min(WORLD.height - 1, inventoryCursor.y));
       return;
@@ -4129,11 +2775,10 @@ canvas.addEventListener("mouseup", () => {
     if (!swipeHeld) return;
     swipeHeld = false;
     const mag = Math.hypot(moveAccumX, moveAccumY);
-    if (mag > 12 && (isGrounded() || debugState.noSwipeCap)) {
-      const worldSwipe = rotateScreenVectorToWorld(-moveAccumX, -moveAccumY);
-      player.vx += worldSwipe.x * 0.8;
-      player.vy += worldSwipe.y * 0.8;
-      player.angularVelocity += -(worldSwipe.x + worldSwipe.y) * 0.00125;
+    if (mag > 12 && isGrounded()) {
+      player.vx += -moveAccumX * 0.8;
+      player.vy += -moveAccumY * 0.8;
+      player.angularVelocity += -(moveAccumX + moveAccumY) * 0.00125;
       lastSwipeAt = performance.now();
     }
     moveAccumX = 0;
@@ -4146,7 +2791,7 @@ canvas.addEventListener("mouseup", () => {
     isDragging = false;
     return;
   }
-  if (!isGrounded() && !debugState.noSwipeCap) {
+  if (!isGrounded()) {
     isDragging = false;
     return;
   }
@@ -4161,66 +2806,48 @@ canvas.addEventListener("mouseup", () => {
   isDragging = false;
 });
 
-function handleInventoryPointerAction(cx, cy) {
+canvas.addEventListener("click", (event) => {
+  if (gameState === "title") {
+    const buttons = drawTitleScreen.buttons || [];
+    const rect = canvas.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    for (const btn of buttons) {
+      if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+        beginMapSelect(btn.mode);
+        return;
+      }
+    }
+  }
+  if (gameState === "mapSelect") {
+    const buttons = drawMapSelectScreen.buttons || [];
+    const rect = canvas.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    for (const btn of buttons) {
+      if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+        selectMap(btn.mapId);
+        return;
+      }
+    }
+  }
   if (!inventoryOpen || !pointerLocked) return;
   const bounds = drawInventoryUI.exitBounds;
   if (!bounds) return;
+  const cx = inventoryCursor.x;
+  const cy = inventoryCursor.y;
   const itemsTab = drawInventoryUI.itemsTabBounds;
   if (itemsTab && cx >= itemsTab.x && cx <= itemsTab.x + itemsTab.w && cy >= itemsTab.y && cy <= itemsTab.y + itemsTab.h) {
     inventoryTab = "items";
     return;
   }
   const packsTab = drawInventoryUI.packsTabBounds;
-  if (enablePackSystem && packsTab && cx >= packsTab.x && cx <= packsTab.x + packsTab.w && cy >= packsTab.y && cy <= packsTab.y + packsTab.h) {
+  if (packsTab && cx >= packsTab.x && cx <= packsTab.x + packsTab.w && cy >= packsTab.y && cy <= packsTab.y + packsTab.h) {
     inventoryTab = "packs";
     return;
   }
-  const openSkinViewer = drawInventoryUI.skinViewerOpenBounds;
-  if (openSkinViewer && cx >= openSkinViewer.x && cx <= openSkinViewer.x + openSkinViewer.w && cy >= openSkinViewer.y && cy <= openSkinViewer.y + openSkinViewer.h) {
-    const idx = skins.findIndex((s) => s.id === currentSkin);
-    skinViewerState.index = idx >= 0 ? idx : 0;
-    skinViewerState.previewSkinId = null;
-    skinViewerState.preview = null;
-    skinViewerState.sim.x = 0;
-    skinViewerState.sim.y = 0;
-    skinViewerState.sim.lastTime = 0;
-    skinViewerState.open = true;
-    return;
-  }
-  if (skinViewerState.open) {
-    const leftB = drawInventoryUI.skinViewerLeftBounds;
-    if (leftB && cx >= leftB.x && cx <= leftB.x + leftB.w && cy >= leftB.y && cy <= leftB.y + leftB.h) {
-      skinViewerState.index = (skinViewerState.index - 1 + skins.length) % skins.length;
-      skinViewerState.previewSkinId = null;
-      skinViewerState.preview = null;
-      skinViewerState.sim.x = 0;
-      skinViewerState.sim.y = 0;
-      return;
-    }
-    const rightB = drawInventoryUI.skinViewerRightBounds;
-    if (rightB && cx >= rightB.x && cx <= rightB.x + rightB.w && cy >= rightB.y && cy <= rightB.y + rightB.h) {
-      skinViewerState.index = (skinViewerState.index + 1) % skins.length;
-      skinViewerState.previewSkinId = null;
-      skinViewerState.preview = null;
-      skinViewerState.sim.x = 0;
-      skinViewerState.sim.y = 0;
-      return;
-    }
-    const equipB = drawInventoryUI.skinViewerEquipBounds;
-    if (equipB && cx >= equipB.x && cx <= equipB.x + equipB.w && cy >= equipB.y && cy <= equipB.y + equipB.h) {
-      const skin = skins[skinViewerState.index];
-      if (skin) loadSkin(skin.id);
-      return;
-    }
-    const closeVB = drawInventoryUI.skinViewerCloseBounds;
-    if (closeVB && cx >= closeVB.x && cx <= closeVB.x + closeVB.w && cy >= closeVB.y && cy <= closeVB.y + closeVB.h) {
-      skinViewerState.open = false;
-      return;
-    }
-    return;
-  }
   const skinTab = drawInventoryUI.skinTabBounds;
-  if (enableInventorySkinTab && skinTab && cx >= skinTab.x && cx <= skinTab.x + skinTab.w && cy >= skinTab.y && cy <= skinTab.y + skinTab.h) {
+  if (skinTab && cx >= skinTab.x && cx <= skinTab.x + skinTab.w && cy >= skinTab.y && cy <= skinTab.y + skinTab.h) {
     skinTabState.open = !skinTabState.open;
     return;
   }
@@ -4288,7 +2915,7 @@ function handleInventoryPointerAction(cx, cy) {
     return;
   }
   const packBounds = drawInventoryUI.packOpenBounds;
-  if (enablePackSystem && packBounds && cx >= packBounds.x && cx <= packBounds.x + packBounds.w && cy >= packBounds.y && cy <= packBounds.y + packBounds.h) {
+  if (packBounds && cx >= packBounds.x && cx <= packBounds.x + packBounds.w && cy >= packBounds.y && cy <= packBounds.y + packBounds.h) {
     const pack = packs.find((p) => p.id === packBounds.packId);
     if (pack && coinState.count >= pack.price) {
       coinState.count -= pack.price;
@@ -4326,57 +2953,20 @@ function handleInventoryPointerAction(cx, cy) {
   if (cx >= bounds.x && cx <= bounds.x + bounds.w && cy >= bounds.y && cy <= bounds.y + bounds.h) {
     inventoryOpen = false;
   }
-}
-
-canvas.addEventListener("click", (event) => {
-  if (gameState === "title") {
-    const buttons = drawTitleScreen.buttons || [];
-    const rect = canvas.getBoundingClientRect();
-    const cx = event.clientX - rect.left;
-    const cy = event.clientY - rect.top;
-    for (const btn of buttons) {
-      if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
-        beginMapSelect(btn.mode);
-        return;
-      }
-    }
-  }
-  if (gameState === "mapSelect") {
-    const buttons = drawMapSelectScreen.buttons || [];
-    const rect = canvas.getBoundingClientRect();
-    const cx = event.clientX - rect.left;
-    const cy = event.clientY - rect.top;
-    for (const btn of buttons) {
-      if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
-        selectMap(btn.mapId);
-        return;
-      }
-    }
-  }
 });
 
 window.addEventListener("keydown", (event) => {
-  if (event.shiftKey && event.key.toLowerCase() === "p") {
-    debugState.noSwipeCap = !debugState.noSwipeCap;
-    return;
-  }
-  if (event.shiftKey && event.key.toLowerCase() === "c") {
-    debugState.freezeCamera = !debugState.freezeCamera;
-    return;
-  }
   if (event.key.toLowerCase() === "a") inputState.left = true;
   if (event.key.toLowerCase() === "d") inputState.right = true;
   if (event.key.toLowerCase() === "w") inputState.up = true;
   if (event.key.toLowerCase() === "s") {
     inputState.down = true;
-    if (enableInventorySkinTab && inventoryOpen) {
+    if (inventoryOpen) {
       skinTabState.open = !skinTabState.open;
     }
   }
   if (event.key.toLowerCase() === "t") {
-    const idx = skins.findIndex((s) => s.id === currentSkin);
-    const next = skins[(idx + 1) % skins.length];
-    if (next) loadSkin(next.id);
+    loadSkin("teto");
   }
   if (event.key.toLowerCase() === "r") resetPlayer();
   if (event.key.toLowerCase() === "e") {
@@ -4391,7 +2981,6 @@ window.addEventListener("keydown", (event) => {
     if (!inventoryOpen) {
       shopState.open = false;
       skinTabState.open = false;
-      skinViewerState.open = false;
     }
   }
   if (gameState === "title") {
@@ -4416,7 +3005,6 @@ document.addEventListener("pointerlockchange", () => {
   moveAccumY = 0;
   lastMoveAt = 0;
   swipeHeld = false;
-  skinViewerState.open = false;
   if (!pointerLocked) {
     inventoryOpen = false;
   }
@@ -4427,6 +3015,10 @@ function handleResize() {
   rebuildStars();
   camera.x = player.x - WORLD.width / (2 * camera.zoom);
   camera.y = player.y - WORLD.height / (2 * camera.zoom);
+  const bottomLimit = getCameraBottomLimit();
+  if (gameMode !== "TTC" && bottomLimit !== null && camera.y > bottomLimit) {
+    camera.y = bottomLimit;
+  }
 }
 
 window.addEventListener("resize", handleResize);
@@ -4458,20 +3050,17 @@ function startGame(mode) {
 }
 
 frogImage.onload = () => {
-  rebuildCollisionMask();
+  frogSolidPixels = buildSolidPixelMask(frogImage);
   updateSkinScale();
   rebuildFrogRenderData();
   rebuildFrogPartsData();
 };
-frogCollisionImage.onload = () => {
-  rebuildCollisionMask();
-};
-frogOutlineImage.onload = () => {};
-frogPartsImage.onload = () => {
+frogOutlineImage.onload = () => {
+  rebuildFrogRenderData();
   rebuildFrogPartsData();
 };
-planetImage.onload = () => {
-  rebuildPlanetChunks();
+frogPartsImage.onload = () => {
+  rebuildFrogPartsData();
 };
 tetoSizeImage.onload = () => {
   tetoSize.w = tetoSizeImage.width;
@@ -4489,7 +3078,6 @@ function maybeStart() {
   if (!pendingStart || !currentMap) return;
   if (
     !frogImage.complete ||
-    !frogCollisionImage.complete ||
     !bg1Image.complete ||
     !bg2Image.complete
   )
@@ -4499,7 +3087,6 @@ function maybeStart() {
   if (enableMiddleground && MAPS[currentMap].hasMiddleground && !middlegroundImage.complete) return;
   if (!tree1Image.complete || !tree2Image.complete || !woodImage.complete) return;
   if (!coinImage.complete) return;
-  if (planetSpriteCollision.enabled && !planetImage.complete) return;
   if (!asteroidImage.complete) return;
   if (!asteroidMask) {
     const info = buildImageMaskInfo(asteroidImage);
@@ -4507,20 +3094,17 @@ function maybeStart() {
     asteroidWidth = info.width;
     asteroidHeight = info.height;
   }
+  if (!frogPartsImage.complete) return;
   if (!inventoryCursorImage.complete) {
     return;
   }
   if (!allForegroundImagesLoaded()) return;
-  if (!frogSolidPixels) return;
-  if (planetSpriteCollision.enabled && !planetSpriteCollision.ready) {
-    rebuildPlanetChunks();
-    if (!planetSpriteCollision.ready) return;
-  }
+  if (!frogSolidPixels || !frogOutlineImage.complete) return;
   if (!propTypes.tree1.mask || !propTypes.tree2.mask) return;
-  if (
-    currentSkinHasParts &&
-    (!frogPartsMap || !frogParts || !frogPartsCollisionMap || !frogPartsCollision || !frogPartsRenderToCollision)
-  ) {
+  if (!frogBaseImageData || !frogSquishMap) {
+    rebuildFrogRenderData();
+  }
+  if (!frogPartsMap || !frogParts || !frogPartsCollisionMap || !frogPartsCollision || !frogPartsRenderToCollision) {
     rebuildFrogPartsData();
   }
   buildForegroundLayers();
@@ -4533,7 +3117,6 @@ function maybeStart() {
 }
 
 frogImage.addEventListener("load", maybeStart);
-frogCollisionImage.addEventListener("load", maybeStart);
 frogOutlineImage.addEventListener("load", maybeStart);
 frogPartsImage.addEventListener("load", maybeStart);
 bg1Image.addEventListener("load", maybeStart);
@@ -4544,7 +3127,6 @@ for (const img of cloudImages) {
   img.addEventListener("load", maybeStart);
 }
 earthImage.addEventListener("load", maybeStart);
-planetImage.addEventListener("load", maybeStart);
 asteroidImage.addEventListener("load", maybeStart);
 titleBackgroundImage.addEventListener("load", maybeStart);
 asteroidImage.onload = () => {
